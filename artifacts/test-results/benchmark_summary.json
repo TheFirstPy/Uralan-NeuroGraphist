@@ -1,0 +1,47 @@
+[
+  {
+    "id": "real_1_finance_call",
+    "title": "Звонок 1: Консультант и клиент (телефонная линия)",
+    "duration_sec": 42.0,
+    "total_ms": 15608,
+    "diarization_ms": 8265,
+    "asr_ms": 6715,
+    "rtf": 0.3716,
+    "wer_percent": 25.27,
+    "ref_words": 91,
+    "edit_distance": 23,
+    "expected_speakers": 2,
+    "detected_speakers": 2,
+    "utterances_count": 7
+  },
+  {
+    "id": "real_2_podlodka_speech_ai",
+    "title": "Диалог 2: Подкаст Podlodka — Распознавание речи и звука",
+    "duration_sec": 153.8,
+    "total_ms": 58121,
+    "diarization_ms": 35745,
+    "asr_ms": 20682,
+    "rtf": 0.3779,
+    "wer_percent": 5.64,
+    "ref_words": 337,
+    "edit_distance": 19,
+    "expected_speakers": 2,
+    "detected_speakers": 2,
+    "utterances_count": 7
+  },
+  {
+    "id": "real_3_podlodka_roundtable",
+    "title": "Диалог 3: Круглый стол Podlodka (3 говорящих)",
+    "duration_sec": 116.02,
+    "total_ms": 46023,
+    "diarization_ms": 26752,
+    "asr_ms": 17792,
+    "rtf": 0.3967,
+    "wer_percent": 6.25,
+    "ref_words": 256,
+    "edit_distance": 16,
+    "expected_speakers": 3,
+    "detected_speakers": 3,
+    "utterances_count": 7
+  }
+]
