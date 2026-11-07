@@ -1,0 +1,4 @@
+test_id,timestamp_utc,file_name,duration_seconds,speakers_expected,speakers_detected,utterances_count,ref_words,edit_distance,wer_percent,diarization_ms,asr_ms,total_ms,rtf,notes
+real-001,2026-11-07T10:21:00Z,real_1_finance_call.wav,42.00,2,2,7,91,23,25.27,8265,6715,15608,0.3716,"Реальный телефонный разговор консультанта и клиента (AxonData, телефонная линия 8->16 кГц)"
+real-002,2026-11-07T10:21:00Z,real_2_podlodka_speech_ai.wav,153.80,2,2,7,337,19,5.64,35745,20682,58121,0.3779,"Живой диалог экспертов IT-подкаста Podlodka (выпуски 292 и 275, 2 говорящих)"
+real-003,2026-11-07T10:21:00Z,real_3_podlodka_roundtable.wav,116.02,3,3,7,256,16,6.25,26752,17792,46023,0.3967,"Круглый стол IT-подкаста Podlodka с 3 разными спикерами (выпуски 132, 306, 292)"
