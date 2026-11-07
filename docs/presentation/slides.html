@@ -1,852 +1,1173 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Уралан: Нейрографист — Защита проекта</title>
-  <style>
-    :root {
-      --primary: #1d4ed8;
-      --primary-light: #3b82f6;
-      --primary-dark: #1e3a8a;
-      --accent: #10b981;
-      --accent-warm: #f59e0b;
-      --bg: #0b0f19;
-      --surface: #111827;
-      --surface-card: #1f2937;
-      --border: #374151;
-      --text: #f9fafb;
-      --text-muted: #9ca3af;
-      --speaker-1: #3b82f6;
-      --speaker-2: #10b981;
-      --speaker-3: #f59e0b;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      overflow: hidden;
-      height: 100vh;
-      width: 100vw;
-      user-select: none;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Уралан: Нейрографист — Nuclear IT Hack 2026</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0B0F19;
+            --bg-card: rgba(17, 24, 39, 0.85);
+            --bg-card-inner: rgba(11, 15, 25, 0.75);
+            --blue: #3B82F6;
+            --blue-glow: rgba(59, 130, 246, 0.25);
+            --emerald: #10B981;
+            --emerald-glow: rgba(16, 185, 129, 0.25);
+            --amber: #F59E0B;
+            --amber-glow: rgba(245, 158, 11, 0.25);
+            --text-main: #F9FAFB;
+            --text-muted: #9CA3AF;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+        }
 
-    /* Верхняя контрольная панель */
-    .topbar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 52px;
-      background: rgba(17, 24, 39, 0.9);
-      backdrop-filter: blur(8px);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 24px;
-      z-index: 100;
-    }
-    .topbar-brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-    }
-    .brand-badge {
-      background: linear-gradient(135deg, var(--primary), var(--primary-light));
-      color: #fff;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 6px;
-      text-transform: uppercase;
-    }
-    .topbar-controls {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    .timer-badge {
-      background: rgba(31, 41, 55, 0.9);
-      border: 1px solid var(--border);
-      padding: 5px 12px;
-      border-radius: 20px;
-      font-family: monospace;
-      font-size: 14px;
-      font-weight: 600;
-      color: #34d399;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-    }
-    .timer-badge.warning { color: #fbbf24; border-color: #fbbf24; }
-    .timer-badge.danger { color: #f87171; border-color: #f87171; animation: pulse 1s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-    .ctrl-btn {
-      background: var(--surface-card);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .ctrl-btn:hover { background: var(--border); }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    /* Прогресс-бар */
-    .progress-line {
-      position: fixed;
-      top: 52px;
-      left: 0;
-      height: 3px;
-      background: linear-gradient(90deg, var(--primary), var(--accent));
-      transition: width 0.3s ease;
-      z-index: 101;
-    }
+        body {
+            background-color: #05070C;
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    /* Контейнер слайдов */
-    .deck-container {
-      position: absolute;
-      top: 55px;
-      bottom: 45px;
-      left: 0;
-      right: 0;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .slide {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      max-width: 1380px;
-      padding: 36px 48px;
-      display: flex;
-      flex-direction: column;
-      opacity: 0;
-      pointer-events: none;
-      transform: translateY(20px) scale(0.98);
-      transition: opacity 0.35s ease, transform 0.35s ease;
-    }
-    .slide.active {
-      opacity: 1;
-      pointer-events: auto;
-      transform: translateY(0) scale(1);
-    }
+        /* Контейнер 16:9 с автоматическим масштабированием */
+        .deck-wrapper {
+            width: 1600px;
+            height: 900px;
+            position: relative;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
+                radial-gradient(circle at 88% 82%, rgba(16, 185, 129, 0.10) 0%, transparent 40%),
+                linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.85);
+            overflow: hidden;
+            transform-origin: center center;
+        }
 
-    /* Элементы слайдов */
-    .slide-header {
-      margin-bottom: 24px;
-    }
-    .slide-eyebrow {
-      color: var(--primary-light);
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      margin-bottom: 6px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .slide-title {
-      font-size: 38px;
-      font-weight: 800;
-      line-height: 1.2;
-      background: linear-gradient(135deg, #ffffff 40%, #9ca3af 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .slide-subtitle {
-      font-size: 18px;
-      color: var(--text-muted);
-      margin-top: 8px;
-    }
+        .slide {
+            position: absolute;
+            inset: 0;
+            padding: 46px 64px 72px 64px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(12px);
+            transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s;
+        }
 
-    /* Сетки и карточки */
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; flex: 1; }
-    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; flex: 1; }
-    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; flex: 1; }
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            z-index: 2;
+        }
 
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 22px;
-      display: flex;
-      flex-direction: column;
-      position: relative;
-      overflow: hidden;
-    }
-    .card.highlight {
-      border-color: var(--primary-light);
-      background: linear-gradient(145deg, rgba(29, 78, 216, 0.15), var(--surface));
-    }
-    .card.accent {
-      border-color: var(--accent);
-      background: linear-gradient(145deg, rgba(16, 185, 129, 0.15), var(--surface));
-    }
-    .card-title {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .card-body {
-      color: #d1d5db;
-      font-size: 14px;
-      line-height: 1.6;
-      flex: 1;
-    }
-    .card-body ul {
-      margin-left: 20px;
-      margin-top: 8px;
-    }
-    .card-body li { margin-bottom: 6px; }
+        /* Верхний колонтитул слайда */
+        .slide-top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 20px;
+        }
 
-    /* Статистические плашки */
-    .stat-hero {
-      font-size: 52px;
-      font-weight: 900;
-      color: #38bdf8;
-      line-height: 1;
-      margin-bottom: 6px;
-    }
-    .stat-label {
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--text-muted);
-      font-weight: 600;
-    }
+        .hack-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: var(--text-muted);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
 
-    /* Таблица бенчмарка */
-    .table-container {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      margin-top: 10px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    th {
-      background: #1f2937;
-      text-align: left;
-      padding: 12px 14px;
-      font-weight: 700;
-      color: #e5e7eb;
-      border-bottom: 1px solid var(--border);
-    }
-    td {
-      padding: 11px 14px;
-      border-bottom: 1px solid rgba(55, 65, 81, 0.5);
-      color: #d1d5db;
-    }
-    tr:last-child td { border-bottom: none; }
-    tr.total-row {
-      background: rgba(29, 78, 216, 0.15);
-      font-weight: 700;
-      color: #fff;
-    }
-    .badge-ok {
-      background: rgba(16, 185, 129, 0.2);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-weight: 700;
-    }
+        .hack-brand span.dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--emerald);
+            box-shadow: 0 0 10px var(--emerald);
+        }
 
-    /* Нижняя строка навигации */
-    .bottombar {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 45px;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 24px;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-    .nav-keys {
-      display: flex;
-      gap: 16px;
-    }
-    .key-hint {
-      background: var(--surface-card);
-      border: 1px solid var(--border);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: monospace;
-      color: #e5e7eb;
-    }
+        .slide-Title-block h2 {
+            font-size: 34px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(90deg, #FFFFFF 0%, #93C5FD 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
 
-    /* Заметки докладчика (скрытая панель) */
-    .speaker-drawer {
-      position: fixed;
-      bottom: 45px;
-      left: 0;
-      right: 0;
-      height: 220px;
-      background: rgba(15, 23, 42, 0.97);
-      border-top: 2px solid var(--primary-light);
-      padding: 16px 28px;
-      overflow-y: auto;
-      transform: translateY(100%);
-      transition: transform 0.3s ease;
-      z-index: 99;
-    }
-    .speaker-drawer.open { transform: translateY(0); }
-    .speaker-drawer-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--primary-light);
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-    }
-    .speaker-drawer-content {
-      font-size: 15px;
-      line-height: 1.6;
-      color: #f3f4f6;
-    }
+        .slide-Title-block p {
+            color: var(--text-muted);
+            font-size: 16px;
+            margin-top: 3px;
+        }
 
-    /* Слайд 1 титульный */
-    .hero-title {
-      font-size: 54px;
-      font-weight: 900;
-      line-height: 1.15;
-      background: linear-gradient(135deg, #ffffff 30%, #60a5fa 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 16px;
-    }
-    .tagline {
-      font-size: 22px;
-      color: #93c5fd;
-      margin-bottom: 32px;
-      max-width: 900px;
-    }
-    .hero-badges {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 36px;
-    }
-    .pill {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--border);
-      padding: 8px 16px;
-      border-radius: 24px;
-      font-size: 14px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .pill.green { border-color: rgba(16, 185, 129, 0.5); background: rgba(16, 185, 129, 0.12); color: #6ee7b7; }
-    .pill.blue { border-color: rgba(59, 130, 246, 0.5); background: rgba(59, 130, 246, 0.12); color: #93c5fd; }
-  </style>
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Карточки и бейджи */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 22px;
+            backdrop-filter: blur(12px);
+            position: relative;
+        }
+
+        .card-blue { border-top: 3px solid var(--blue); box-shadow: 0 10px 30px -10px var(--blue-glow); }
+        .card-emerald { border-top: 3px solid var(--emerald); box-shadow: 0 10px 30px -10px var(--emerald-glow); }
+        .card-amber { border-top: 3px solid var(--amber); box-shadow: 0 10px 30px -10px var(--amber-glow); }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .tag-blue { background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.35); }
+        .tag-emerald { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.35); }
+        .tag-amber { background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.35); }
+
+        /* СЛАЙД 1: Титульный */
+        .hero-layout {
+            display: grid;
+            grid-template-columns: 1.35fr 0.65fr;
+            gap: 36px;
+            align-items: center;
+            margin: auto 0;
+        }
+
+        .hero-title {
+            font-size: 66px;
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            margin: 16px 0 18px 0;
+            background: linear-gradient(135deg, #FFFFFF 20%, #60A5FA 65%, #34D399 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-sub {
+            font-size: 23px;
+            line-height: 1.45;
+            color: #D1D5DB;
+            font-weight: 400;
+            max-width: 95%;
+        }
+
+        .manifest-box {
+            background: #070A12;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            border-radius: 16px;
+            padding: 22px;
+            box-shadow: 0 0 40px rgba(16, 185, 129, 0.12);
+        }
+
+        .kpi-grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            margin-top: 18px;
+        }
+
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 20px 22px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 800;
+            margin: 6px 0 4px 0;
+        }
+
+        /* СЛАЙД 2: Архитектура */
+        .pipeline-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            flex: 1;
+            align-items: stretch;
+        }
+
+        .pipe-step {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .step-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--text-muted);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .pipe-list {
+            list-style: none;
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .pipe-list li {
+            font-size: 14.5px;
+            line-height: 1.45;
+            color: #E5E7EB;
+            padding-left: 16px;
+            position: relative;
+        }
+
+        .pipe-list li::before {
+            content: "▹";
+            position: absolute;
+            left: 0;
+            color: var(--blue);
+        }
+
+        /* СЛАЙД 3: Вызовы и решения */
+        .challenges-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .challenge-row {
+            display: grid;
+            grid-template-columns: 1fr 50px 1.25fr;
+            align-items: center;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 20px 24px;
+        }
+
+        .arrow-divider {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            color: var(--emerald);
+            font-weight: bold;
+        }
+
+        /* СЛАЙД 4: Таблица тестов */
+        .bench-layout {
+            display: grid;
+            grid-template-columns: 1.45fr 0.55fr;
+            gap: 22px;
+            flex: 1;
+            align-items: stretch;
+        }
+
+        table.cyber-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+        }
+
+        table.cyber-table th {
+            text-align: left;
+            padding: 12px 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        table.cyber-table td {
+            padding: 16px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            vertical-align: middle;
+        }
+
+        table.cyber-table tr.total-row td {
+            background: rgba(16, 185, 129, 0.12);
+            border-top: 2px solid var(--emerald);
+            border-bottom: none;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        /* СЛАЙД 5: Скриншоты UI */
+        .ui-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            flex: 1;
+            align-items: stretch;
+        }
+
+        .phone-mockup-real {
+            background: #070A12;
+            border: 2px solid rgba(255, 255, 255, 0.14);
+            border-radius: 20px;
+            padding: 10px;
+            margin-bottom: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .phone-mockup-real img {
+            width: 100%;
+            height: 240px;
+            object-fit: cover;
+            object-position: top center;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .phone-notch {
+            width: 60px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 99px;
+            margin: 0 auto 8px auto;
+        }
+
+        /* СЛАЙД 6: Применимость */
+        .sec-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 22px;
+            flex: 1;
+        }
+
+        /* СЛАЙД 7: Финал и JSON */
+        .final-grid {
+            display: grid;
+            grid-template-columns: 1.05fr 0.95fr;
+            gap: 26px;
+            flex: 1;
+            align-items: stretch;
+        }
+
+        .code-window {
+            background: #060911;
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            border-radius: 16px;
+            padding: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13.5px;
+            line-height: 1.5;
+            color: #E5E7EB;
+            overflow: hidden;
+        }
+
+        /* Выдвижная панель заметок спикера */
+        .speaker-notes-drawer {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 54px;
+            height: 190px;
+            background: rgba(11, 15, 25, 0.97);
+            border-top: 2px solid var(--blue);
+            backdrop-filter: blur(16px);
+            padding: 16px 64px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 20;
+        }
+
+        .speaker-notes-drawer.open {
+            transform: translateY(0);
+        }
+
+        /* Навигационная панель снизу */
+        .deck-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 54px;
+            padding: 0 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(7, 10, 18, 0.92);
+            border-top: 1px solid var(--border-subtle);
+            z-index: 10;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-main);
+            border: 1px solid var(--border-subtle);
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .nav-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: var(--blue);
+        }
+
+        .progress-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--blue), var(--emerald));
+            transition: width 0.3s ease;
+        }
+
+        /* Печать в PDF (16:9 без полей) */
+        @media print {
+            body { background: var(--bg-dark); overflow: visible; height: auto; width: auto; display: block; }
+            .deck-wrapper { transform: none !important; width: 1600px; height: auto; box-shadow: none; border: none; }
+            .slide { position: relative; opacity: 1 !important; visibility: visible !important; transform: none !important; page-break-after: always; height: 900px; width: 1600px; }
+            .deck-footer, .speaker-notes-drawer { display: none !important; }
+            @page { size: 1600px 900px; margin: 0; }
+        }
+    </style>
 </head>
 <body>
 
-  <!-- Верхняя строка управления -->
-  <div class="topbar">
-    <div class="topbar-brand">
-      <span>УРАЛАН: НЕЙРОГРАФИСТ</span>
-      <span class="brand-badge">Финал Nuclear IT Hack</span>
-      <span style="color: var(--text-muted); font-size: 12px;">КСиТ МИФИ × HEX.TEAM</span>
+<div class="deck-wrapper" id="deck">
+
+    <!-- ==================== СЛАЙД 1: ТИТУЛЬНЫЙ ==================== -->
+    <section class="slide active" data-timing="0:00 – 0:40 (40 сек)">
+        <div class="slide-top-bar">
+            <div class="hack-brand">
+                <span class="dot"></span>
+                <span>NUCLEAR IT HACK 2026 • КСиТ МИФИ × HEX.TEAM • ТРЕК «НЕЙРО-СТЕНОГРАФИСТ»</span>
+            </div>
+            <div class="tag tag-blue">URALAN TEAM • ANDROID API 26+</div>
+        </div>
+
+        <div class="hero-layout">
+            <div>
+                <div class="tag tag-emerald">100% ON-DEVICE EDGE AI SYSTEM</div>
+                <h1 class="hero-title">УРАЛАН:<br>НЕЙРОГРАФИСТ</h1>
+                <p class="hero-sub">
+                    Автономная локальная система транскрибации, диаризации и ИИ-протоколирования совещаний на Android без единого байта сетевого трафика.
+                </p>
+                <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+                    <span class="tag tag-blue">GigaAM v3 RNN-T INT8</span>
+                    <span class="tag tag-emerald">pyannote 3.0 + Cam++ + F0 Pitch</span>
+                    <span class="tag tag-amber">Qwen3-0.6B INT4 LiteRT-LM</span>
+                </div>
+            </div>
+
+            <div class="manifest-box mono">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:13px; color:#9CA3AF;">
+                    <span>📄 AndroidManifest.xml</span>
+                    <span style="color:var(--emerald);">● AIR-GAPPED VERIFIED</span>
+                </div>
+                <div style="background:#0B0F19; padding:16px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); font-size:13.5px; line-height:1.65;">
+                    <div style="color:#6B7280;">&lt;!-- Принципиальный отказ от сети --&gt;</div>
+                    <div style="color:#EF4444; text-decoration: line-through; opacity:0.85;">
+                        &lt;uses-permission android:name="android.permission.INTERNET"/&gt;
+                    </div>
+                    <div style="color:#10B981; margin-top:8px; font-weight:600;">
+                        ✓ 0 байт внешних запросов<br>
+                        ✓ Все модели внутри APK (721 МБ)<br>
+                        ✓ Полная работа в авиарежиме
+                    </div>
+                </div>
+                <div style="margin-top:16px; display:flex; justify-content:space-between; font-size:13px; color:#D1D5DB;">
+                    <span>Локальный CPU: <strong>ARM64 NEON</strong></span>
+                    <span>Память: <strong>Stream 16 KB</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="kpi-grid-4">
+            <div class="kpi-card card-emerald">
+                <div style="font-size:14px; color:var(--text-muted);">🔒 СЕТЕВОЙ ТРАФИК</div>
+                <div class="kpi-val" style="color:var(--emerald);">0 БАЙТ</div>
+                <div style="font-size:14px; color:#D1D5DB;">В <span class="mono">AndroidManifest.xml</span> физически нет <span class="mono">INTERNET</span></div>
+            </div>
+            <div class="kpi-card card-blue">
+                <div style="font-size:14px; color:var(--text-muted);">⚡ СКОРОСТЬ НА CPU</div>
+                <div class="kpi-val" style="color:var(--blue);">RTF 0.389</div>
+                <div style="font-size:14px; color:#D1D5DB;">В <strong>2.6 раза быстрее</strong> реального времени</div>
+            </div>
+            <div class="kpi-card card-emerald">
+                <div style="font-size:14px; color:var(--text-muted);">🎯 ТОЧНОСТЬ СЛОВ (ASR)</div>
+                <div class="kpi-val" style="color:var(--emerald);">91.54%</div>
+                <div style="font-size:14px; color:#D1D5DB;">Взвешенный <strong>WER = 8.46%</strong> на живой русской речи</div>
+            </div>
+            <div class="kpi-card card-amber">
+                <div style="font-size:14px; color:var(--text-muted);">👥 ДИАРИЗАЦИЯ СПИКЕРОВ</div>
+                <div class="kpi-val" style="color:var(--amber);">100%</div>
+                <div style="font-size:14px; color:#D1D5DB;">Определение числа говорящих (<strong>Cam++ &amp; питч F0</strong>)</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== СЛАЙД 2: АРХИТЕКТУРА ==================== -->
+    <section class="slide" data-timing="0:40 – 1:30 (50 сек)">
+        <div class="slide-top-bar">
+            <div class="slide-Title-block">
+                <h2>4-каскадный локальный нейросетевой конвейер</h2>
+                <p>Последовательная обработка аудиопотока со строгим управлением памятью на мобильном CPU</p>
+            </div>
+            <div class="tag tag-blue">EDGE AI PIPELINE</div>
+        </div>
+
+        <div class="pipeline-grid">
+            <!-- Шаг 1 -->
+            <div class="card card-blue pipe-step">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="step-num">КАСКАД 01</span>
+                        <span class="tag tag-blue">16 кГц DSP</span>
+                    </div>
+                    <h3 style="font-size:22px; margin:12px 0 8px 0;">DSP &amp; Silero VAD</h3>
+                    <p style="font-size:14px; color:var(--text-muted);">Предобработка сигнала и детекция голосовой активности</p>
+                    <ul class="pipe-list">
+                        <li><strong>Оконный sinc-ресемплер Блэкмана</strong> для чистой дискретизации в 16 кГц без алиасинга.</li>
+                        <li><strong>ФВЧ Баттерворта (70 Гц)</strong> — подавление низкочастотного гула и шума микрофона.</li>
+                        <li><strong>Silero VAD (ONNX)</strong> с контекстным поглощением микропауз <strong>&lt; 1.2 с</strong>.</li>
+                    </ul>
+                </div>
+                <div style="margin-top:18px; padding-top:12px; border-top:1px solid var(--border-subtle); font-size:13px;" class="mono">
+                    Выход: Непрерывные речевые фреймы
+                </div>
+            </div>
+
+            <!-- Шаг 2 -->
+            <div class="card card-emerald pipe-step">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="step-num">КАСКАД 02</span>
+                        <span class="tag tag-emerald">192-d + F0</span>
+                    </div>
+                    <h3 style="font-size:22px; margin:12px 0 8px 0;">Гибридная диаризация</h3>
+                    <p style="font-size:14px; color:var(--text-muted);">Нейросетевая сегментация + биометрия основного тона</p>
+                    <ul class="pipe-list">
+                        <li><strong>pyannote-segmentation-3.0</strong> — точный поиск границ смен и перекрытий спикеров.</li>
+                        <li><strong>3D-Speaker Cam++ (192-d)</strong> — извлечение акустических эмбеддингов тембра.</li>
+                        <li><strong>VoicePitchAnalyzer (F0)</strong> — автокорреляция <strong>72–360 Гц</strong> с подавлением субгармоник.</li>
+                    </ul>
+                </div>
+                <div style="margin-top:18px; padding-top:12px; border-top:1px solid var(--border-subtle); font-size:13px; color:var(--emerald);" class="mono">
+                    Выход: 100% разделение говорящих
+                </div>
+            </div>
+
+            <!-- Шаг 3 -->
+            <div class="card card-blue pipe-step">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="step-num">КАСКАД 03</span>
+                        <span class="tag tag-blue">INT8 • 222 МБ</span>
+                    </div>
+                    <h3 style="font-size:22px; margin:12px 0 8px 0;">ASR Распознавание</h3>
+                    <p style="font-size:14px; color:var(--text-muted);">GigaAM v3 RNN-T Punct (SberDevices, ONNX Runtime)</p>
+                    <ul class="pipe-list">
+                        <li>Акустическая модель <strong>GigaAM v3 RNN-T</strong> с нативной расстановкой пунктуации и регистра.</li>
+                        <li>Генерация точных <strong>пословных таймкодов</strong> для синхронизации с плеером.</li>
+                        <li>Эвристический фильтр мычания и пауз хезитации <span class="mono" style="color:#60A5FA;">isVocalHesitation()</span>.</li>
+                    </ul>
+                </div>
+                <div style="margin-top:18px; padding-top:12px; border-top:1px solid var(--border-subtle); font-size:13px;" class="mono">
+                    Выход: Чистый размеченный транскрипт
+                </div>
+            </div>
+
+            <!-- Шаг 4 -->
+            <div class="card card-amber pipe-step">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="step-num">КАСКАД 04</span>
+                        <span class="tag tag-amber">INT4 • 328 МБ</span>
+                    </div>
+                    <h3 style="font-size:22px; margin:12px 0 8px 0;">Локальная LLM</h3>
+                    <p style="font-size:14px; color:var(--text-muted);">Qwen3-0.6B INT4 на движке Google AI Edge LiteRT-LM</p>
+                    <ul class="pipe-list">
+                        <li>Генерация <strong>6-секционного протокола</strong> совещания прямо на смартфоне.</li>
+                        <li>Секции: паспорт, резюме, повестка, тезисы, мнения сторон, поручения.</li>
+                        <li>Встраивание кликабельных таймкодов <span class="mono" style="color:#FBBF24;">▶ [MM:SS.d]</span> к каждому факту.</li>
+                    </ul>
+                </div>
+                <div style="margin-top:18px; padding-top:12px; border-top:1px solid var(--border-subtle); font-size:13px; color:var(--amber);" class="mono">
+                    Выход: Интерактивный ИИ-протокол
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== СЛАЙД 3: ИНЖЕНЕРНЫЕ ВЫЗОВЫ ==================== -->
+    <section class="slide" data-timing="1:30 – 2:25 (55 сек)">
+        <div class="slide-top-bar">
+            <div class="slide-Title-block">
+                <h2>Инженерные вызовы и архитектурные решения</h2>
+                <p>Как мы преодолели ограничения мобильного железа и акустической схожести голосов</p>
+            </div>
+            <div class="tag tag-emerald">R&amp;D BREAKTHROUGHS</div>
+        </div>
+
+        <div class="challenges-stack">
+            <!-- Вызов 1 -->
+            <div class="challenge-row">
+                <div>
+                    <div class="tag tag-amber" style="margin-bottom:10px;">ВЫЗОВ #1 • БИОМЕТРИЯ ГОЛОСА</div>
+                    <h3 style="font-size:21px; margin-bottom:6px;">Слияние похожих мужских голосов</h3>
+                    <p style="font-size:15px; color:#D1D5DB; line-height:1.45;">
+                        Чистые эмбеддинги Cam++ давали косинусное расстояние <strong class="mono" style="color:var(--amber);">0.40–0.44</strong> на двух похожих мужских баритонах и ошибочно склеивали двух разных участников в одного спикера.
+                    </p>
+                </div>
+                <div class="arrow-divider">➔</div>
+                <div style="background:var(--bg-card-inner); padding:16px 20px; border-radius:12px; border-left:3px solid var(--emerald);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="color:var(--emerald); font-size:16px;">РЕШЕНИЕ: VoicePitchAnalyzer (F0) + Фразовая кластеризация</strong>
+                        <span class="tag tag-emerald">100% РАЗДЕЛЕНИЕ</span>
+                    </div>
+                    <p style="font-size:14.5px; color:#E5E7EB; line-height:1.45;">
+                        Добавлен физический анализатор частоты основного тона <strong>F0 (72–360 Гц)</strong> с октавной регуляризацией матрицы расстояний и выравниванием по границам фраз ASR.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Вызов 2 -->
+            <div class="challenge-row">
+                <div>
+                    <div class="tag tag-amber" style="margin-bottom:10px;">ВЫЗОВ #2 • УПРАВЛЕНИЕ ПАМЯТЬЮ</div>
+                    <h3 style="font-size:21px; margin-bottom:6px;">OutOfMemoryError на файлах 47+ минут</h3>
+                    <p style="font-size:15px; color:#D1D5DB; line-height:1.45;">
+                        Распаковка длинных совещаний в единый <span class="mono">FloatArray</span> требовала аллокации <strong class="mono" style="color:var(--amber);">540+ МБ</strong> непрерывной кучи Android, вызывая падение приложения при одновременной работе моделей.
+                    </p>
+                </div>
+                <div class="arrow-divider">➔</div>
+                <div style="background:var(--bg-card-inner); padding:16px 20px; border-radius:12px; border-left:3px solid var(--blue);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="color:#60A5FA; font-size:16px;">РЕШЕНИЕ: Потоковый буфер 16 КБ + Строгий Lifecycle ONNX</strong>
+                        <span class="tag tag-blue">ZERO OOM</span>
+                    </div>
+                    <p style="font-size:14.5px; color:#E5E7EB; line-height:1.45;">
+                        Декодер <span class="mono">AudioDecoder</span> переведен на <strong>кольцевой потоковый буфер 16 КБ</strong>. Сессии ONNX инициализируются и принудительно выгружаются из RAM строго последовательно между каскадами.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Вызов 3 -->
+            <div class="challenge-row">
+                <div>
+                    <div class="tag tag-amber" style="margin-bottom:10px;">ВЫЗОВ #3 • ГРАНИЦЫ СЕГМЕНТАЦИИ</div>
+                    <h3 style="font-size:21px; margin-bottom:6px;">Обрезание окончаний слов на границах VAD</h3>
+                    <p style="font-size:15px; color:#D1D5DB; line-height:1.45;">
+                        Агрессивное срабатывание базового детектора пауз дробило живую речь на сверхкороткие фрагменты, теряя глухие согласные на концах слов и контекст для RNN-T.
+                    </p>
+                </div>
+                <div class="arrow-divider">➔</div>
+                <div style="background:var(--bg-card-inner); padding:16px 20px; border-radius:12px; border-left:3px solid var(--emerald);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="color:var(--emerald); font-size:16px;">РЕШЕНИЕ: Контекстное слияние пауз и коротких окон</strong>
+                        <span class="tag tag-emerald">−1.8% WER</span>
+                    </div>
+                    <p style="font-size:14.5px; color:#E5E7EB; line-height:1.45;">
+                        Внедрено умное поглощение пауз <strong>&lt; 1.2 с</strong> и агрегация коротких речевых окон <strong>&lt; 3.2 с</strong>, что дало модели GigaAM полный акустический контекст фразы и снизило ошибку распознавания на <strong>1.8%</strong>.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== СЛАЙД 4: РЕЗУЛЬТАТЫ ТЕСТОВ ==================== -->
+    <section class="slide" data-timing="2:25 – 3:15 (50 сек)">
+        <div class="slide-top-bar">
+            <div class="slide-Title-block">
+                <h2>Результаты собственных тестов на живой речи (21+ мин)</h2>
+                <p>Валидация на реальных телефонных звонках, IT-дискуссиях и динамичных многоголосых подкастах</p>
+            </div>
+            <div class="tag tag-emerald">REAL-WORLD BENCHMARK</div>
+        </div>
+
+        <div class="bench-layout">
+            <div class="card" style="padding: 18px 22px; display:flex; flex-direction:column; justify-content:space-between;">
+                <table class="cyber-table">
+                    <thead>
+                        <tr>
+                            <th>Тестовый датасет / Сценарий</th>
+                            <th>Длит.</th>
+                            <th>Спикеры</th>
+                            <th>Точность / WER</th>
+                            <th>Скорость (RTF)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <strong>Телефонный звонок (AxonData)</strong>
+                                <div style="font-size:13px; color:var(--text-muted);">Узкая полоса частот, артефакты сжатия линии</div>
+                            </td>
+                            <td class="mono">42 с</td>
+                            <td><span class="tag tag-blue">2 спикера</span></td>
+                            <td class="mono" style="color:var(--amber);">WER 25.27%</td>
+                            <td class="mono" style="color:var(--emerald);">0.372</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>IT-подкаст Podlodka (Диалог)</strong>
+                                <div style="font-size:13px; color:var(--text-muted);">Профессиональная лексика, англицизмы, термины</div>
+                            </td>
+                            <td class="mono">154 с</td>
+                            <td><span class="tag tag-blue">2 спикера</span></td>
+                            <td>
+                                <span class="mono" style="color:var(--emerald); font-weight:700;">WER 5.64%</span>
+                                <div style="font-size:12px; color:#9CA3AF;">Точность: 94.36%</div>
+                            </td>
+                            <td class="mono" style="color:var(--emerald);">0.378</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>Podlodka (Круглый стол)</strong>
+                                <div style="font-size:13px; color:var(--text-muted);">Быстрые перебивания, 100% точность смен говорящих</div>
+                            </td>
+                            <td class="mono">116 с</td>
+                            <td><span class="tag tag-emerald">3 спикера</span></td>
+                            <td>
+                                <span class="mono" style="color:var(--emerald); font-weight:700;">WER 6.25%</span>
+                                <div style="font-size:12px; color:#9CA3AF;">Смены: 100%</div>
+                            </td>
+                            <td class="mono" style="color:var(--emerald);">0.397</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <strong>Подкаст «Дела №67» (2400 слов)</strong>
+                                <div style="font-size:13px; color:var(--text-muted);">Позов, Шастун, Ахмедова — беглая речь, эмоции</div>
+                            </td>
+                            <td class="mono">15.9 мин</td>
+                            <td><span class="tag tag-emerald">3 спикера</span></td>
+                            <td>
+                                <span class="mono" style="color:var(--emerald); font-weight:700;">WER 8.45%</span>
+                                <div style="font-size:12px; color:#9CA3AF;">Точность: 91.55%</div>
+                            </td>
+                            <td class="mono" style="color:var(--emerald);">0.391</td>
+                        </tr>
+                        <tr class="total-row">
+                            <td>ИТОГО ПО КОРПУСУ (3084 СЛОВА)</td>
+                            <td class="mono">21.1 мин</td>
+                            <td><span class="tag tag-emerald">100% ТОЧНО</span></td>
+                            <td class="mono" style="color:var(--emerald);">WER = 8.46%</td>
+                            <td class="mono" style="color:var(--blue);">RTF = 0.389</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:18px;">
+                <div class="card card-emerald" style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="mono" style="font-size:13px; color:var(--text-muted);">АГРЕГИРОВАННАЯ ТОЧНОСТЬ СЛОВ</div>
+                    <div class="mono" style="font-size:46px; font-weight:800; color:var(--emerald); margin:6px 0;">91.54%</div>
+                    <p style="font-size:14.5px; color:#D1D5DB; line-height:1.45;">
+                        Взвешенный <strong>WER = 8.46%</strong> на объеме <strong>3084 слов</strong> живой спонтанной русской речи со сложной терминологией.
+                    </p>
+                </div>
+
+                <div class="card card-blue" style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+                    <div class="mono" style="font-size:13px; color:var(--text-muted);">ПРОИЗВОДИТЕЛЬНОСТЬ EDGE CPU</div>
+                    <div class="mono" style="font-size:46px; font-weight:800; color:var(--blue); margin:6px 0;">2.6× FASTER</div>
+                    <p style="font-size:14.5px; color:#D1D5DB; line-height:1.45;">
+                        Средний <strong>RTF = 0.389</strong>: часовое совещание полностью обрабатывается за ~23 минуты без нагрева и троттлинга.
+                    </p>
+                </div>
+
+                <div class="card card-amber" style="padding:18px 22px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-weight:700; font-size:15px;">Определение числа спикеров</span>
+                        <span class="mono" style="color:var(--amber); font-weight:800; font-size:20px;">4 из 4 (100%)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== СЛАЙД 5: ПОЛЬЗОВАТЕЛЬСКИЙ ИНТЕРФЕЙС ==================== -->
+    <section class="slide" data-timing="3:15 – 4:00 (45 сек)">
+        <div class="slide-top-bar">
+            <div class="slide-Title-block">
+                <h2>Пользовательский интерфейс (Jetpack Compose Material 3)</h2>
+                <p>Реальные скриншоты работающего приложения: от записи до интерактивной верификации тезисов</p>
+            </div>
+            <div class="tag tag-blue">MATERIAL 3 DARK UI</div>
+        </div>
+
+        <div class="ui-grid-3">
+            <!-- Блок 1: Главный экран -->
+            <div class="card card-blue" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div class="phone-mockup-real">
+                        <div class="phone-notch"></div>
+                        <img src="../assets/screen_1_main.png" alt="Главный экран и запись" />
+                    </div>
+                    <h3 style="font-size:19px; margin-bottom:8px;">1. Импорт и диктофон</h3>
+                    <ul class="pipe-list">
+                        <li>Поддержка любых форматов: <strong>MP3, WAV, M4A, FLAC, OGG</strong>.</li>
+                        <li>Запись с микрофона с живым <strong>RMS-визуализатором</strong> уровня сигнала.</li>
+                        <li><strong>4 встроенные демо-записи</strong> для проверки жюри и <strong>3 профиля</strong> скорости («Быстро», «Стандарт», «Макс»).</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Блок 2: Плеер и диалог -->
+            <div class="card card-emerald" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div class="phone-mockup-real">
+                        <div class="phone-notch"></div>
+                        <img src="../assets/screen_2_result.png" alt="Интерактивный плеер и диалог" />
+                    </div>
+                    <h3 style="font-size:19px; margin-bottom:8px;">2. Интерактивный плеер</h3>
+                    <ul class="pipe-list">
+                        <li>Цветовая <strong>таймлайн-шкала активности</strong> каждого спикера.</li>
+                        <li>Перемотка к любой реплике в 1 клик и <strong>полнотекстовый поиск</strong>.</li>
+                        <li>Точечная переобработка шумных реплик нейросетевым <strong>денойзером GTCRN</strong>.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Блок 3: ИИ-протокол -->
+            <div class="card card-amber" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div class="phone-mockup-real">
+                        <div class="phone-notch"></div>
+                        <img src="../assets/screen_3_completed_dialogue.png" alt="ИИ-протокол Qwen3" />
+                    </div>
+                    <h3 style="font-size:19px; margin-bottom:8px;">3. Умный ИИ-протокол</h3>
+                    <ul class="pipe-list">
+                        <li><strong>6 секций протокола</strong>: паспорт встречи, резюме, повестка, тезисы, мнения сторон, поручения.</li>
+                        <li>Кликабельные таймкоды <span class="mono" style="color:#FBBF24;">▶ [MM:SS.d]</span> — мгновенный переход к первоисточнику звука в плеере.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== СЛАЙД 6: ПРИМЕНИМОСТЬ И БЕЗОПАСНОСТЬ ==================== -->
+    <section class="slide" data-timing="4:00 – 4:30 (30 сек)">
+        <div class="slide-top-bar">
+            <div class="slide-Title-block">
+                <h2>Применимость и информационная безопасность</h2>
+                <p>Индустриальные сценарии, где облачные ASR/LLM-сервисы запрещены службами ИБ</p>
+            </div>
+            <div class="tag tag-emerald">ZERO-TRUST &amp; 152-ФЗ</div>
+        </div>
+
+        <div class="sec-grid-3">
+            <div class="card card-emerald" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div style="font-size:38px; margin-bottom:14px;">🛡️</div>
+                    <span class="tag tag-emerald" style="margin-bottom:12px;">ГОССЕКТОР И ПРОМЫШЛЕННОСТЬ</span>
+                    <h3 style="font-size:23px; margin-bottom:12px;">Закрытые совещания и режимные объекты</h3>
+                    <p style="font-size:15.5px; color:#D1D5DB; line-height:1.55;">
+                        Идеально для контура предприятий атомной отрасли и КИИ. Аудиозапись и текст <strong>никогда не покидают устройство</strong>. Полная работоспособность в экранированных помещениях без связи и полное соответствие требованиям <strong>152-ФЗ</strong>.
+                    </p>
+                </div>
+                <div class="mono" style="font-size:13px; color:var(--emerald); padding-top:14px; border-top:1px solid var(--border-subtle);">
+                    ✓ Работа в закрытом контуре без Wi-Fi / LTE
+                </div>
+            </div>
+
+            <div class="card card-blue" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div style="font-size:38px; margin-bottom:14px;">🏦</div>
+                    <span class="tag tag-blue" style="margin-bottom:12px;">ENTERPRISE &amp; FINTECH</span>
+                    <h3 style="font-size:23px; margin-bottom:12px;">Банки, инвестиции и VIP-переговоры</h3>
+                    <p style="font-size:15.5px; color:#D1D5DB; line-height:1.55;">
+                        Фиксация переговоров по сделкам M&amp;A, кредитным комитетам и встречам с VIP-клиентами. Автоматическое формирование <strong>протокола поручений</strong> на телефоне банкира без риска утечки коммерческой тайны во внешние облачные API.
+                    </p>
+                </div>
+                <div class="mono" style="font-size:13px; color:#60A5FA; padding-top:14px; border-top:1px solid var(--border-subtle);">
+                    ✓ Защита банковской и коммерческой тайны
+                </div>
+            </div>
+
+            <div class="card card-amber" style="display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div style="font-size:38px; margin-bottom:14px;">⚖️</div>
+                    <span class="tag tag-amber" style="margin-bottom:12px;">LEGAL TECH &amp; ФОРЕНЗИКА</span>
+                    <h3 style="font-size:23px; margin-bottom:12px;">Юриспруденция и аудит доказательств</h3>
+                    <p style="font-size:15.5px; color:#D1D5DB; line-height:1.55;">
+                        Формирование надежной доказательной базы при очных опросах, арбитраже и комплаенс-проверках. <strong>Пословные таймкоды</strong> и точная диаризация позволяют воспроизвести любое спорное слово или реплику в <strong>1 клик</strong>.
+                    </p>
+                </div>
+                <div class="mono" style="font-size:13px; color:var(--amber); padding-top:14px; border-top:1px solid var(--border-subtle);">
+                    ✓ Пословная верификация аудиодоказательств
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== СЛАЙД 7: ГОТОВНОСТЬ К СДАЧЕ ==================== -->
+    <section class="slide" data-timing="4:30 – 5:00 (30 сек)">
+        <div class="slide-top-bar">
+            <div class="slide-Title-block">
+                <h2>Готовность к сдаче, интеграции и защите</h2>
+                <p>Полный комплект инженерных артефактов и строгое соответствие эталонному формату хакатона</p>
+            </div>
+            <div class="tag tag-emerald">PRODUCTION READY</div>
+        </div>
+
+        <div class="final-grid">
+            <div style="display:flex; flex-direction:column; gap:16px; justify-content:space-between;">
+                <div class="card card-blue" style="padding:18px 22px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h3 style="font-size:18px;">🌿 Инженерная культура GitHub Flow</h3>
+                        <span class="tag tag-blue">76 ТЕСТОВ ПРОЙДЕНО</span>
+                    </div>
+                    <p style="font-size:14px; color:#D1D5DB; margin-top:6px;">
+                        Чистая история коммитов, модульная архитектура Android, 76 unit-тестов Gradle и проверенный CI-конвейер.
+                    </p>
+                    <div style="margin-top:10px;">
+                        <a href="https://github.com/TheFirstPy/Uralan-NeuroGraphist" target="_blank" style="color:#60A5FA; text-decoration:none; font-size:13.5px;" class="mono">→ github.com/TheFirstPy/Uralan-NeuroGraphist</a>
+                    </div>
+                </div>
+
+                <div class="card card-emerald" style="padding:18px 22px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h3 style="font-size:18px;">📦 Автономный релизный APK на Google Диске</h3>
+                        <span class="tag tag-emerald">721 МБ • ALL-IN-ONE</span>
+                    </div>
+                    <p style="font-size:14px; color:#D1D5DB; margin-top:6px;">
+                        Устанавливается в 1 клик, включает все веса моделей (Silero, pyannote, Cam++, GigaAM v3, GTCRN, Qwen3) и сэмплы.
+                    </p>
+                    <div style="margin-top:10px;">
+                        <a href="https://drive.google.com/file/d/1VOA6RNx1JRe1wsy3YlQf7TVfOY-t63R3/view?usp=drive_link" target="_blank" style="color:#34D399; text-decoration:none; font-size:13.5px;" class="mono">→ uralan-stenograf-release.apk (Google Drive)</a>
+                    </div>
+                </div>
+
+                <div class="card card-amber" style="padding:18px 22px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h3 style="font-size:18px;">📤 Мультиформатный экспорт в 1 клик</h3>
+                        <span class="tag tag-amber">JSON • MD • SRT • TXT</span>
+                    </div>
+                    <p style="font-size:14px; color:#D1D5DB; margin-top:6px;">
+                        Строгое соблюдение спецификации хакатона со схемой <span class="mono" style="color:#FBBF24;">speaker_1</span>, <span class="mono" style="color:#FBBF24;">speaker_2</span> для автопроверки.
+                    </p>
+                </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; justify-content:space-between; gap:16px;">
+                <div class="code-window" style="flex:1;">
+                    <div style="display:flex; justify-content:space-between; color:#9CA3AF; font-size:12px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px;">
+                        <span>export_hackathon_schema.json (Стр. 15 задания)</span>
+                        <span style="color:var(--emerald);">✓ 100% SPEC COMPLIANT</span>
+                    </div>
+<pre style="white-space: pre-wrap;">{
+  <span style="color:#60A5FA;">"transcript"</span>: [
+    {
+      <span style="color:#34D399;">"speaker_id"</span>: <span style="color:#FBBF24;">"speaker_1"</span>,
+      <span style="color:#34D399;">"start_ms"</span>: <span style="color:#A78BFA;">1240</span>,
+      <span style="color:#34D399;">"end_ms"</span>: <span style="color:#A78BFA;">6890</span>,
+      <span style="color:#34D399;">"text"</span>: <span style="color:#F9FAFB;">"Коллеги, начинаем защиту проекта «Уралан: Нейрографист»."</span>
+    },
+    {
+      <span style="color:#34D399;">"speaker_id"</span>: <span style="color:#FBBF24;">"speaker_2"</span>,
+      <span style="color:#34D399;">"start_ms"</span>: <span style="color:#A78BFA;">7320</span>,
+      <span style="color:#34D399;">"end_ms"</span>: <span style="color:#A78BFA;">11950</span>,
+      <span style="color:#34D399;">"text"</span>: <span style="color:#F9FAFB;">"Все четыре каскада работают на 100% локально на Android."</span>
+    }
+  ]
+}</pre>
+                </div>
+
+                <div style="background: linear-gradient(90deg, rgba(59,130,246,0.2), rgba(16,185,129,0.2)); border: 1px solid var(--emerald); border-radius:16px; padding:20px 24px; text-align:center;">
+                    <div style="font-size:24px; font-weight:800; color:#FFFFFF;">Спасибо за внимание!</div>
+                    <div style="font-size:15.5px; color:#A7F3D0; margin-top:4px;">Команда <strong>Uralan Team</strong> готова ответить на вопросы экспертов и показать Live-демо</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Выдвижная панель заметок спикера / шпаргалки -->
+    <div class="speaker-notes-drawer" id="speakerNotesDrawer">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px;">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:var(--blue); font-weight:700;">
+                📢 ШПАРГАЛКА СПИКЕРА ДЛЯ СЛАЙДА <span id="notesSlideNumber">1</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); cursor:pointer;" onclick="toggleNotes()">✕ Закрыть (N)</div>
+        </div>
+        <div id="notesText" style="font-size:14.5px; line-height:1.55; color:#F3F4F6; margin:8px 0; overflow-y:auto; max-height:120px;">
+            Загрузка текста...
+        </div>
     </div>
-    <div class="topbar-controls">
-      <div id="presentation-timer" class="timer-badge" title="Кликните для сброса/паузы">
-        <span>⏱ 05:00</span>
-      </div>
-      <button class="ctrl-btn" onclick="toggleSpeakerDrawer()">Заметки спикера (N)</button>
-      <button class="ctrl-btn" onclick="toggleFullScreen()">На весь экран (F)</button>
-    </div>
-  </div>
 
-  <div class="progress-line" id="progress-bar" style="width: 14.28%;"></div>
-
-  <!-- Контейнер слайдов -->
-  <div class="deck-container">
-
-    <!-- СЛАЙД 1: ТИТУЛЬНЫЙ -->
-    <div class="slide active" data-slide="1">
-      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
-        <div class="slide-eyebrow">
-          <span>⚡ Nuclear IT Hack 2026 — Команда Uralan Team</span>
+    <!-- Нижняя панель навигации и тайминга -->
+    <footer class="deck-footer">
+        <div class="progress-line" id="progressBar" style="width: 14.28%;"></div>
+        <div>
+            <span>УРАЛАН: НЕЙРОГРАФИСТ</span> • <span id="slideCounter">СЛАЙД 1 / 7</span>
         </div>
-        <h1 class="hero-title">Уралан: Нейрографист</h1>
-        <p class="tagline">100% автономная локальная система транскрибации, диаризации и ИИ-протоколирования совещаний на Android без интернета</p>
-        
-        <div class="hero-badges">
-          <div class="pill green">🔒 0 байт сетевого трафика (No INTERNET)</div>
-          <div class="pill blue">⚡ В 2.6 раза быстрее реального времени (RTF 0.389)</div>
-          <div class="pill blue">🎯 Точность слов 91.54% (GigaAM v3 RNN-T)</div>
-          <div class="pill green">👥 100% определение спикеров (Cam++ + F0)</div>
+        <div id="timingBadge" style="color: var(--emerald); cursor:pointer;" title="Кликните для паузы таймера">
+            ⏱ ТАЙМИНГ ЗАЩИТЫ: 0:00 – 0:40 (40 сек) [Осталось: <span id="countdown">05:00</span>]
         </div>
-
-        <div style="display: flex; gap: 32px; color: var(--text-muted); font-size: 14px; border-top: 1px solid var(--border); padding-top: 24px;">
-          <div><strong>Целевая платформа:</strong> Android API 26+ (arm64-v8a / x86_64)</div>
-          <div><strong>Размер APK:</strong> 721 МБ (все веса включены)</div>
-          <div><strong>Спецификация:</strong> JSON хакатона + Markdown + SRT + TXT</div>
+        <div class="nav-controls">
+            <button class="nav-btn" onclick="toggleNotes()">Заметки (N)</button>
+            <button class="nav-btn" onclick="changeSlide(-1)">← Назад</button>
+            <button class="nav-btn" onclick="changeSlide(1)">Вперёд →</button>
+            <button class="nav-btn" onclick="toggleFullScreen()">⛶ Полный экран (F)</button>
         </div>
-      </div>
-    </div>
+    </footer>
 
-    <!-- СЛАЙД 2: ПРОБЛЕМАТИКА И АРХИТЕКТУРНЫЙ КАСКАД -->
-    <div class="slide" data-slide="2">
-      <div class="slide-header">
-        <div class="slide-eyebrow">Архитектурный конвейер</div>
-        <h2 class="slide-title">Многокаскадный локальный Edge AI конвейер</h2>
-        <p class="slide-subtitle">Все этапы обработки от сырых аудиосэмплов до формирования протокола выполняются строго на устройстве</p>
-      </div>
+</div>
 
-      <div class="grid-4">
-        <div class="card">
-          <div class="card-title" style="color: #60a5fa;">1. DSP & VAD</div>
-          <div class="card-body">
-            <strong>Подготовка сигнала 16 кГц:</strong>
-            <ul>
-              <li>Оконный sinc-ресемплер Блэкмана (32 отвода)</li>
-              <li>ФВЧ Баттерворта 70 Гц (срез шума кондиционеров)</li>
-              <li>Silero VAD ONNX: контекстное поглощение пауз и окон-сирот (&lt;3.2 с)</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card highlight">
-          <div class="card-title" style="color: #38bdf8;">2. Диаризация спикеров</div>
-          <div class="card-body">
-            <strong>Инновация точности:</strong>
-            <ul>
-              <li><strong>pyannote 3.0:</strong> границы локальной активности</li>
-              <li><strong>3D-Speaker Cam++:</strong> тембральные эмбеддинги 192-d</li>
-              <li><strong>VoicePitchAnalyzer:</strong> вычисление F0 (72–360 Гц) с подавлением субгармоник</li>
-              <li>Регуляризация расстояния по F0: чёткое разделение близких мужских голосов!</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title" style="color: #34d399;">3. Распознавание (ASR)</div>
-          <div class="card-body">
-            <strong>GigaAM v3 RNN-T Punct:</strong>
-            <ul>
-              <li>Квантованный энкодер INT8 (~222 МБ)</li>
-              <li>Лучший WER на русской разговорной речи</li>
-              <li>Встроенная пунктуация и заглавные буквы</li>
-              <li>Пословные таймкоды без сторонних моделей</li>
-              <li>Фильтр нелексического мычания <code>isVocalHesitation()</code></li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card accent">
-          <div class="card-title" style="color: #fbbf24;">4. Локальная LLM</div>
-          <div class="card-body">
-            <strong>Qwen3-0.6B INT4 (LiteRT-LM):</strong>
-            <ul>
-              <li>6-секционный структурированный протокол встречи</li>
-              <li>Кликабельные таймкоды <code>▶ [MM:SS.d]</code> к ключевым моментам</li>
-              <li>Позиции сторон и поручения с дедлайнами</li>
-              <li>Интеллектуальная коррекция сложных реплик</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- СЛАЙД 3: РЕШЕНИЕ ГЛАВНЫХ ВЫЗОВОВ ХАКАТОНА -->
-    <div class="slide" data-slide="3">
-      <div class="slide-header">
-        <div class="slide-eyebrow">Инженерные вызовы и решения</div>
-        <h2 class="slide-title">Как мы победили главные проблемы мобильного ASR</h2>
-        <p class="slide-subtitle">Реальные технические решения проблем, возникающих на живых записях</p>
-      </div>
-
-      <div class="grid-3">
-        <div class="card highlight">
-          <div class="card-title">❌ Проблема: Слияние мужских голосов</div>
-          <div class="card-body">
-            Косинусное расстояние между мужчинами близкого возраста часто 0.40–0.44 (при пороге 0.50 они сливаются в одного).<br><br>
-            <strong style="color: #34d399;">Решение «Уралан»:</strong>
-            Разработан <code>VoicePitchAnalyzer</code> на основе нормализованной автокорреляции. Добавление октавного штрафа по частоте основного тона F0 и фразовая кластеризация разделяют голоса со 100% точностью.
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">❌ Проблема: OutOfMemory на 47+ мин</div>
-          <div class="card-body">
-            Попытка загрузить 45-минутный WAV в один массив <code>FloatArray</code> требует &gt;540 МБ непрерывной памяти Java Heap, приводя к крашу.<br><br>
-            <strong style="color: #34d399;">Решение «Уралан»:</strong>
-            Потоковый кольцевой буфер 16 КБ в <code>AudioDecoder</code> и строгий последовательный жизненный цикл нейросетей (VAD ➔ Diarization ➔ ASR ➔ LLM) с мгновенным освобождением нативных дескрипторов.
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">❌ Проблема: Обрезание слов на стыках VAD</div>
-          <div class="card-body">
-            Жёсткая нарезка на 15-секундные окна обрезает окончания слов и нарушает контекст авторегрессионного декодера.<br><br>
-            <strong style="color: #34d399;">Решение «Уралан»:</strong>
-            Умное VAD-поглощение пауз: короткие окна-сироты (&lt; 3.2 с) при паузе &lt; 1.2 с автоматически объединяются в единый непрерывный контекст, снижая WER на 1.8%.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- СЛАЙД 4: РЕЗУЛЬТАТЫ БЕНЧМАРКА НА РЕАЛЬНЫХ ДАННЫХ -->
-    <div class="slide" data-slide="4">
-      <div class="slide-header">
-        <div class="slide-eyebrow">Валидация и метрики</div>
-        <h2 class="slide-title">Результаты собственных тестов на живой речи</h2>
-        <p class="slide-subtitle">Тестирование проводилось исключительно на реальных записях диалогов и подкастов (без синтетических TTS-голосов)</p>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;">
-        <div class="card" style="align-items: center; text-align: center;">
-          <div class="stat-hero">8.46%</div>
-          <div class="stat-label">Взвешенный WER</div>
-        </div>
-        <div class="card" style="align-items: center; text-align: center;">
-          <div class="stat-hero">0.389</div>
-          <div class="stat-label">Real-Time Factor (RTF)</div>
-        </div>
-        <div class="card" style="align-items: center; text-align: center;">
-          <div class="stat-hero">100%</div>
-          <div class="stat-label">Точность числа спикеров</div>
-        </div>
-        <div class="card" style="align-items: center; text-align: center;">
-          <div class="stat-hero">21 мин</div>
-          <div class="stat-label">Объём проверенных аудио</div>
-        </div>
-      </div>
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>ID теста и источник</th>
-              <th>Длительность</th>
-              <th>Слов</th>
-              <th>Время (ASR + Диаризация)</th>
-              <th>RTF</th>
-              <th>WER, %</th>
-              <th>Спикеры (найдено / факт)</th>
-              <th>Статус</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>real_1_finance_call</strong> (Телефон 8 кГц, AxonData)</td>
-              <td>42.0 с</td>
-              <td>91</td>
-              <td>15.6 с</td>
-              <td>0.372</td>
-              <td>25.27%</td>
-              <td><strong>2 / 2</strong></td>
-              <td><span class="badge-ok">ПРОЙДЕН</span></td>
-            </tr>
-            <tr>
-              <td><strong>real_2_podlodka_speech_ai</strong> (IT-подкаст, 2 спикера)</td>
-              <td>153.8 с</td>
-              <td>337</td>
-              <td>58.1 с</td>
-              <td>0.378</td>
-              <td><strong>5.64%</strong></td>
-              <td><strong>2 / 2 (100% смен)</strong></td>
-              <td><span class="badge-ok">ПРОЙДЕН</span></td>
-            </tr>
-            <tr>
-              <td><strong>real_3_podlodka_roundtable</strong> (Круглый стол, 3 спикера)</td>
-              <td>116.0 с</td>
-              <td>256</td>
-              <td>46.0 с</td>
-              <td>0.397</td>
-              <td><strong>6.25%</strong></td>
-              <td><strong>3 / 3 (100% смен)</strong></td>
-              <td><span class="badge-ok">ПРОЙДЕН</span></td>
-            </tr>
-            <tr>
-              <td><strong>real_4_dela_podcast</strong> (Подкаст «Дела №67»: Позов, Шастун, Ахмедова)</td>
-              <td>954.0 с (15.9 мин)</td>
-              <td>2400</td>
-              <td>373.0 с</td>
-              <td>0.391</td>
-              <td><strong>8.45%</strong></td>
-              <td><strong>3 / 3 (Позов, Шастун, Ахмедова)</strong></td>
-              <td><span class="badge-ok">ПРОЙДЕН</span></td>
-            </tr>
-            <tr class="total-row">
-              <td><strong>ИТОГО (4 реальных сценария)</strong></td>
-              <td><strong>1265.8 с (21.1 мин)</strong></td>
-              <td><strong>3084</strong></td>
-              <td><strong>492.7 с (~8.2 мин)</strong></td>
-              <td><strong>0.389</strong></td>
-              <td><strong>8.46%</strong></td>
-              <td><strong>100% точность кластеризации</strong></td>
-              <td><span class="badge-ok">SOTA EDGE</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- СЛАЙД 5: ИНТЕРФЕЙС И ПОЛЬЗОВАТЕЛЬСКИЙ ОПЫТ -->
-    <div class="slide" data-slide="5">
-      <div class="slide-header">
-        <div class="slide-eyebrow">Пользовательский интерфейс</div>
-        <h2 class="slide-title">Продуманный UX на Jetpack Compose Material 3</h2>
-        <p class="slide-subtitle">Не просто консольная утилита, а полноценный инструмент для руководителей и команд</p>
-      </div>
-
-      <div class="grid-3">
-        <div class="card">
-          <div class="card-title">1. Импорт и диктофон</div>
-          <div style="text-align: center; margin: 8px 0;">
-            <img src="../assets/screen_1_main.png" alt="Главный экран" style="max-height: 190px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.4);" />
-          </div>
-          <div class="card-body">
-            <ul>
-              <li>Любые форматы (WAV, MP3, M4A, OGG, FLAC) через MediaCodec</li>
-              <li>Диктофон с RMS-визуализатором уровня звука</li>
-              <li>4 готовых тестовых сэмпла для демо в 1 касание</li>
-              <li>3 профиля качества: <em>«Быстро»</em>, <em>«Стандарт»</em>, <em>«Макс»</em></li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card highlight">
-          <div class="card-title">2. Интерактивный плеер</div>
-          <div style="text-align: center; margin: 8px 0;">
-            <img src="../assets/screen_2_result.png" alt="Интерактивный плеер" style="max-height: 190px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.4);" />
-          </div>
-          <div class="card-body">
-            <ul>
-              <li>Цветовая шкала активности каждого говорящего</li>
-              <li>Клик по реплике перематывает плеер к началу фразы</li>
-              <li>Фильтрация и полнотекстовый поиск по участникам</li>
-              <li>Повторная обработка фрагмента с шумоподавлением GTCRN</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card accent">
-          <div class="card-title">3. Умный ИИ-протокол</div>
-          <div style="text-align: center; margin: 8px 0;">
-            <img src="../assets/screen_3_completed_dialogue.png" alt="ИИ-протокол" style="max-height: 190px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.4);" />
-          </div>
-          <div class="card-body">
-            <ul>
-              <li><strong>6 секций:</strong> Паспорт, Резюме, Повестка, Тезисы, Позиции, Поручения</li>
-              <li><strong>Кликабельные таймкоды <code>▶ [MM:SS.d]</code>:</strong> мгновенный переход к аудио</li>
-              <li>Экспорт в эталонный JSON хакатона, Markdown, SRT и TXT</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- СЛАЙД 6: БИЗНЕС-ЦЕННОСТЬ И ПРИМЕНЕНИЕ -->
-    <div class="slide" data-slide="6">
-      <div class="slide-header">
-        <div class="slide-eyebrow">Применимость и безопасность</div>
-        <h2 class="slide-title">Где решение незаменимо уже сегодня</h2>
-        <p class="slide-subtitle">Сферы с критическими требованиями к конфиденциальности информации</p>
-      </div>
-
-      <div class="grid-3">
-        <div class="card">
-          <div class="card-title">🏢 Закрытые корпорации и режимные объекты</div>
-          <div class="card-body">
-            <ul>
-              <li>Аудио совещаний топ-менеджмента никогда не покидает смартфон</li>
-              <li>Работа в экранированных переговорных без связи и интернета</li>
-              <li>Соответствие Федеральным законам 152-ФЗ и коммерческой тайне</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">🏦 Банковский сектор и FinTech</div>
-          <div class="card-body">
-            <ul>
-              <li>Стенографирование очных переговоров с VIP-клиентами</li>
-              <li>Автоматическое выделение поручений и договорённостей в протокол встречи</li>
-              <li>Исключение утечек персональных и финансовых данных через облачные API</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="card highlight">
-          <div class="card-title">⚖️ Юридические и следственные действия</div>
-          <div class="card-body">
-            <ul>
-              <li>Точные пословные миллисекундные таймкоды каждого слова</li>
-              <li>Доказательная база: возможность в 1 клик прослушать спорное слово</li>
-              <li>Экспорт официального структурированного протокола в PDF/Markdown</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- СЛАЙД 7: ФИНАЛ И СДАЧА РАБОТЫ -->
-    <div class="slide" data-slide="7">
-      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; max-width: 900px; margin: 0 auto;">
-        <div class="slide-eyebrow" style="justify-content: center;">Все требования регламента выполнены на 100%</div>
-        <h2 class="hero-title" style="font-size: 46px;">«Уралан: Нейрографист» готов к защите</h2>
-        
-        <p style="font-size: 18px; color: #d1d5db; line-height: 1.6; margin-bottom: 28px;">
-          Решение полностью укомплектовано: исходный код в GitHub по модели GitHub Flow, собранный и подписанный Release APK на Google Диске, подробная документация архитектуры и ограничений, бенчмарк 4 реальных аудио и интерактивный протокол на базе локальной LLM.
-        </p>
-
-        <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 32px;">
-          <a href="https://drive.google.com/file/d/1VOA6RNx1JRe1wsy3YlQf7TVfOY-t63R3/view?usp=drive_link" target="_blank" class="ctrl-btn" style="background: var(--primary); font-size: 15px; padding: 10px 20px; text-decoration: none; color: white;">📥 Скачать APK (Google Диск)</a>
-          <a href="https://github.com/TheFirstPy/Uralan-NeuroGraphist" target="_blank" class="ctrl-btn" style="font-size: 15px; padding: 10px 20px; text-decoration: none; color: white;">💻 Репозиторий GitHub</a>
-        </div>
-
-        <div style="font-size: 20px; font-weight: 700; color: #34d399;">
-          Готовы ответить на вопросы уважаемых экспертов!
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Панель заметок спикера -->
-  <div class="speaker-drawer" id="speaker-drawer">
-    <div class="speaker-drawer-title">
-      <span>Шпаргалка спикера для Слайда <span id="notes-slide-num">1</span> (Тайминг: ~45 сек)</span>
-      <span style="cursor: pointer;" onclick="toggleSpeakerDrawer()">✕ Закрыть</span>
-    </div>
-    <div class="speaker-drawer-content" id="speaker-notes-text">
-      Загрузка заметок...
-    </div>
-  </div>
-
-  <!-- Нижняя панель навигации -->
-  <div class="bottombar">
-    <div>Слайд <span id="current-slide">1</span> из <span id="total-slides">7</span></div>
-    <div class="nav-keys">
-      <span>Навигация: <span class="key-hint">←</span> <span class="key-hint">→</span> или <span class="key-hint">Space</span></span>
-      <span>Скрыть/показать заметки: <span class="key-hint">N</span></span>
-      <span>Полный экран: <span class="key-hint">F</span></span>
-    </div>
-    <div>Uralan Team • 2026</div>
-  </div>
-
-  <script>
+<script>
     const slides = document.querySelectorAll('.slide');
-    const totalSlides = slides.length;
-    let currentSlide = 1;
+    const slideCounter = document.getElementById('slideCounter');
+    const timingBadge = document.getElementById('timingBadge');
+    const progressBar = document.getElementById('progressBar');
+    const countdownElem = document.getElementById('countdown');
+    const deck = document.getElementById('deck');
+    const notesDrawer = document.getElementById('speakerNotesDrawer');
+    const notesText = document.getElementById('notesText');
+    const notesSlideNumber = document.getElementById('notesSlideNumber');
+    let currentSlide = 0;
 
-    const speakerNotes = {
-      1: "Здравствуйте, уважаемые эксперты! Наша команда представляет проект «Уралан: Нейрографист». С калмыцкого языка «Уралан» переводится как «Вперёд!». Наша ключевая миссия — создать решение, которое на 100% работает автономно на смартфоне без интернета и серверов, обеспечивая абсолютную конфиденциальность переговоров. В манифесте приложения принципиально нет разрешения INTERNET. При этом конвейер работает в 2.6 раза быстрее реального времени с точностью распознавания слов свыше 91.5%.",
-      2: "Посмотрим на архитектуру. Она состоит из 4 взаимоувязанных каскадов. На этапе DSP мы применяем оконный sinc-ресемплер Блэкмана и ФВЧ Баттерворта 70 Гц, срезающий гул помещений. Silero VAD нарезает речь, предотвращая разрыв слов. Распознавание выполняет GigaAM v3 RNN-T от SberDevices с квантованием INT8 — лучшая модель для русского языка со встроенной пунктуацией. Наша ключевая инновация в диаризации — связка pyannote 3.0 и 3D-Speaker Cam++, дополненная модулем VoicePitchAnalyzer для анализа основного тона голоса. А локальная модель Qwen3-0.6B формирует итоговый протокол.",
-      3: "На реальных записях мы столкнулись с тремя главными проблемами мобильного ASR. Первая — слияние похожих мужских голосов. Мы решили её алгоритмом автокорреляционного анализа частоты основного тона F0, который штрафует эмбеддинги при разной высоте голоса. Вторая проблема — краши OutOfMemory на длинных файлах по 47 минут. Мы внедрили кольцевой буфер в MediaCodec и последовательный жизненный цикл сессий нейросетей. Третья — обрезание слов на стыках VAD, решённое поглощением коротких пауз до 1.2 секунды.",
-      4: "Мы проверили решение на четырёх реальных записях живой русской речи суммарной длительностью более 21 минуты. На записях IT-подкаста Podlodka точность слов составила 94.36% (WER всего 5.64%). На сложнейшем 16-минутном выпуске подкаста «Дела» с тремя ведущими конвейер безошибочно разделил обоих мужчин и женщину со средним WER 8.45%. Общий RTF составил 0.389, то есть 16 минут записи обрабатываются всего за 6 минут прямо на мобильном процессоре.",
-      5: "Интерфейс приложения построен на современном Jetpack Compose. Он включает аудиоплеер с наглядной цветовой диаграммой говорящих, мгновенную перемотку к реплике по клику, поиск и фильтрацию. Гордость решения — интеллектуальный протокол от локальной LLM Qwen: он разбит на 6 структурированных блоков и содержит интерактивные таймкоды. Руководитель может кликнуть на спорный тезис и сразу услышать этот момент в записи.",
-      6: "Где востребовано такое решение? В первую очередь — на закрытых совещаниях топ-менеджеров, на режимных предприятиях атомной отрасли, в банках при работе с конфиденциальными сделками и в юридической практике. Приложение исключает утечку коммерческой тайны в облачные сервисы и позволяет мгновенно получать протокол сразу после окончания встречи.",
-      7: "В заключение: проект «Уралан: Нейрографист» полностью готов к эксплуатации. APK собран и доступен по ссылке на Google Диске, код и тесты выложены в GitHub по модели GitHub Flow, документация оформлена по шаблону хакатона. Большое спасибо за внимание! Мы готовы ответить на ваши вопросы."
-    };
+    const speechNotes = [
+        "Здравствуйте, уважаемые эксперты! Наша команда представляет проект «Уралан: Нейрографист». «Уралан» с калмыцкого — «Вперёд!». Наша ключевая миссия — 100% автономное распознавание русской речи, диаризация и составление протокола прямо на смартфоне без интернета и серверов. В AndroidManifest.xml физически отсутствует INTERNET: процессор смартфона изолирован от сети. При этом конвейер работает в 2.6 раза быстрее реального времени со средней точностью слов 91.54%.",
+        "Архитектура состоит из 4 каскадов: 1) DSP с sinc-ресемплером Блэкмана и ФВЧ Баттерворта 70 Гц плюс Silero VAD. 2) Диаризация pyannote 3.0 и 3D-Speaker Cam++, дополненная нашим анализатором питча VoicePitchAnalyzer. 3) Распознавание GigaAM v3 RNN-T от Сбера в квантовании INT8 со встроенной пунктуацией и пословными таймкодами. 4) Локальная языковая модель Qwen3-0.6B INT4 на Google AI Edge LiteRT-LM, генерирующая 6-секционный интерактивный протокол.",
+        "На живой речи мы победили три главные проблемы: 1) Слияние мужских голосов (косинусное расстояние 0.40–0.44 сливало спикеров) — решили расчетом F0 (72–360 Гц) и фразовой кластеризацией со 100% разделением. 2) Падения OutOfMemory на 47+ мин файлах — решили потоковым буфером 16 КБ и строгим последовательным жизненным циклом сессий ONNX. 3) Обрезание слов на стыках VAD — решили умным поглощением пауз до 1.2 секунды, снизив WER на 1.8%.",
+        "Мы протестировали систему исключительно на реальных записях русской речи (21+ минута, более 3000 слов). На звонке AxonData выделили 2 спикеров. На IT-подкасте Podlodka получили WER всего 5.64% (точность 94.36%). На круглом столе 3 спикеров — 100% точность смен. На сложнейшем 16-минутном подкасте «Дела» с тремя участниками безошибочно разделили обоих мужчин и женщину (WER 8.45%). Общий RTF составил 0.389 — часовое аудио обрабатывается за 23 минуты.",
+        "Пользовательский интерфейс создан на Jetpack Compose Material 3. Здесь представлены реальные скриншоты приложения: слева — импорт любых форматов и запись с диктофона с выбором 3 профилей качества; в центре — интерактивный плеер с цветовой диаграммой спикеров и переходом к реплике в 1 клик; справа — 6-секционный протокол от Qwen3 с кликабельными таймкодами ▶ [MM:SS.d], позволяющими сразу прослушать спорный тезис.",
+        "Решение создано для сфер с высокими требованиями безопасности: закрытые переговорные на режимных объектах и АЭС, финансовый сектор и VIP-сделки без риска утечки в облачные API, а также юриспруденция с пословной привязкой ко времени и защитой доказательной базы. Полное соответствие требованиям 152-ФЗ.",
+        "В заключение: проект «Уралан: Нейрографист» полностью готов к сдаче. Репозиторий оформлен по GitHub Flow с 76 успешно пройденными тестами; релизный автономный APK на 721 МБ загружен на Google Диск; экспорт строго соответствует спецификации задания (speaker_1, speaker_2). Спасибо за внимание! Мы готовы ответить на вопросы экспертов."
+    ];
 
-    function updateSlide(index) {
-      if (index < 1) index = 1;
-      if (index > totalSlides) index = totalSlides;
-      currentSlide = index;
-
-      slides.forEach((s, i) => {
-        if (i + 1 === currentSlide) {
-          s.classList.add('active');
-        } else {
-          s.classList.remove('active');
-        }
-      });
-
-      document.getElementById('current-slide').textContent = currentSlide;
-      document.getElementById('total-slides').textContent = totalSlides;
-      document.getElementById('progress-bar').style.width = (currentSlide / totalSlides * 100) + '%';
-
-      // Обновить заметки
-      document.getElementById('notes-slide-num').textContent = currentSlide;
-      document.getElementById('speaker-notes-text').textContent = speakerNotes[currentSlide] || "Заметки отсутствуют.";
+    function updateSlide() {
+        slides.forEach((s, idx) => {
+            s.classList.toggle('active', idx === currentSlide);
+        });
+        slideCounter.textContent = `СЛАЙД ${currentSlide + 1} / ${slides.length}`;
+        const timing = slides[currentSlide].getAttribute('data-timing');
+        timingBadge.innerHTML = `⏱ ТАЙМИНГ ЗАЩИТЫ: ${timing} [Осталось: <span id="countdown">${formatTime(remainingSeconds)}</span>]`;
+        progressBar.style.width = `${((currentSlide + 1) / slides.length) * 100}%`;
+        
+        notesSlideNumber.textContent = currentSlide + 1;
+        notesText.textContent = speechNotes[currentSlide] || "Заметки отсутствуют.";
     }
 
-    function nextSlide() { updateSlide(currentSlide + 1); }
-    function prevSlide() { updateSlide(currentSlide - 1); }
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-        nextSlide();
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        prevSlide();
-      } else if (e.key === 'f' || e.key === 'F') {
-        toggleFullScreen();
-      } else if (e.key === 'n' || e.key === 'N') {
-        toggleSpeakerDrawer();
-      }
-    });
+    function changeSlide(dir) {
+        currentSlide = (currentSlide + dir + slides.length) % slides.length;
+        updateSlide();
+    }
 
     function toggleFullScreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(()=>{});
+        } else {
+            document.exitFullscreen().catch(()=>{});
+        }
     }
 
-    function toggleSpeakerDrawer() {
-      document.getElementById('speaker-drawer').classList.toggle('open');
+    function toggleNotes() {
+        notesDrawer.classList.toggle('open');
     }
 
-    // Таймер презентации (обратный отсчет 5 минут)
-    let totalSeconds = 300;
+    function fitDeckToScreen() {
+        const scaleX = window.innerWidth / 1600;
+        const scaleY = window.innerHeight / 900;
+        const scale = Math.min(scaleX, scaleY) * 0.96;
+        deck.style.transform = `scale(${scale})`;
+    }
+
+    // Таймер обратного отсчета 5 минут (300 секунд)
+    let remainingSeconds = 300;
     let timerRunning = true;
-    const timerElem = document.getElementById('presentation-timer');
+
+    function formatTime(sec) {
+        const m = Math.floor(sec / 60).toString().padStart(2, '0');
+        const s = (sec % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    }
 
     setInterval(() => {
-      if (!timerRunning) return;
-      if (totalSeconds > 0) {
-        totalSeconds--;
-      }
-      const mins = Math.floor(totalSeconds / 60);
-      const secs = totalSeconds % 60;
-      const formatted = `⏱ ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-      timerElem.querySelector('span').textContent = formatted;
-
-      if (totalSeconds <= 60 && totalSeconds > 20) {
-        timerElem.className = 'timer-badge warning';
-      } else if (totalSeconds <= 20) {
-        timerElem.className = 'timer-badge danger';
-      } else {
-        timerElem.className = 'timer-badge';
-      }
+        if (!timerRunning) return;
+        if (remainingSeconds > 0) {
+            remainingSeconds--;
+            const countElem = document.getElementById('countdown');
+            if (countElem) {
+                countElem.textContent = formatTime(remainingSeconds);
+                if (remainingSeconds <= 30) {
+                    countElem.style.color = '#EF4444';
+                    countElem.style.fontWeight = 'bold';
+                } else if (remainingSeconds <= 60) {
+                    countElem.style.color = '#F59E0B';
+                }
+            }
+        }
     }, 1000);
 
-    timerElem.addEventListener('click', () => {
-      timerRunning = !timerRunning;
+    timingBadge.addEventListener('click', () => {
+        timerRunning = !timerRunning;
     });
 
-    updateSlide(1);
-  </script>
+    window.addEventListener('resize', fitDeckToScreen);
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+            e.preventDefault();
+            changeSlide(1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+            e.preventDefault();
+            changeSlide(-1);
+        } else if (e.key.toLowerCase() === 'f') {
+            toggleFullScreen();
+        } else if (e.key.toLowerCase() === 'n') {
+            toggleNotes();
+        }
+    });
+
+    fitDeckToScreen();
+    updateSlide();
+</script>
 </body>
 </html>
