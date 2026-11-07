@@ -15,7 +15,8 @@
   0b2c2936a8f2ccc795b642d8fcc653c872136480a2bea14ee9d092d079843eae
   ```
 * **Прямая ссылка на скачивание APK:**
-  - [Скачать APK из GitHub Releases](https://github.com/TheFirstPy/Uralan-NeuroGraphist/releases/download/v1.0.0/uralan-stenograf-release.apk)
+  - **Google Диск:** [uralan-stenograf-release.apk на Google Диске](https://drive.google.com/file/d/1VOA6RNx1JRe1wsy3YlQf7TVfOY-t63R3/view?usp=drive_link)
+  - **GitHub Release:** [Страница релиза v1.0.0](https://github.com/TheFirstPy/Uralan-NeuroGraphist/releases/tag/v1.0.0)
 * **Установка на устройство через ADB:**
   ```bash
   adb install -r artifacts/demo/uralan-stenograf-release.apk
