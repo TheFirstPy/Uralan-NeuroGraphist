@@ -207,21 +207,11 @@ class SpeechPipeline(private val context: Context) {
       }
       val asrMs = SystemClock.elapsedRealtime() - tAsr0
 
-      // 5. Пословное выравнивание со спикерами, детекция перебиваний/эмоций и сборка расшифровки
+      // 5. Пословное выравнивание со спикерами и сборка структурированной расшифровки
       val tAlign0 = SystemClock.elapsedRealtime()
-      onProgress(PipelineProgress("Сборка диалога", "Выравнивание меток, анализ перебиваний и интонаций…", 0.96f))
+      onProgress(PipelineProgress("Сборка диалога", "Выравнивание временных меток и реплик…", 0.96f))
       val assigned = TranscriptAligner.assignSpeakersToWords(allWords, diarSlices)
-      val rawUtterances = TranscriptAligner.buildUtterances(
-        assignedWords = assigned,
-        maxPauseWithinTurnMs = if (preset == QualityPreset.HIGH) 1250L else 1500L,
-        filterMinorSpeakers = params.numSpeakers == 0,
-      )
-      val utterances = TranscriptAligner.enrichProsodyAndOverlaps(
-        utterances = rawUtterances,
-        slices = diarSlices,
-        samples = samples,
-        sampleRate = AudioDecoder.TARGET_RATE,
-      )
+      val utterances = TranscriptAligner.buildUtterances(assigned)
       val alignMs = SystemClock.elapsedRealtime() - tAlign0
       val totalMs = SystemClock.elapsedRealtime() - t0
 
@@ -477,14 +467,14 @@ class SpeechPipeline(private val context: Context) {
         provider = "cpu",
       ),
       clustering = clusterCfg,
-      minDurationOn = if (preset == QualityPreset.HIGH) 0.14f else 0.22f,
-      minDurationOff = if (preset == QualityPreset.HIGH) 0.26f else 0.38f,
+      minDurationOn = 0.18f,
+      minDurationOff = 0.35f,
     )
 
-    // Макро-окно: 180 секунд (3 минуты = 2 880 000 отсчётов = 11,5 МБ).
-    // Если запись <= 210 секунд — обрабатываем за 1 проход.
-    val maxSinglePassSamples = sr * 210
-    val macroWindowSamples = sr * 180
+    // Если запись длительностью до 12 минут (720 с) — обрабатываем глобально за 1 проход.
+    // Для сверхдлинных записей (например, 45–60 минут) разбиваем на 5-минутные макро-окна, чтобы исключить OOM.
+    val maxSinglePassSamples = sr * 720
+    val macroWindowSamples = sr * 300
 
     if (samples.size <= maxSinglePassSamples) {
       val diar = OfflineSpeakerDiarization(assetManager = null, config = diarCfg)

@@ -963,74 +963,32 @@ private fun PlayerBar(
 @Composable
 private fun SpeakerTimelineBar(record: TranscriptRecord, durationMs: Long) {
   if (durationMs <= 0 || record.utterances.isEmpty()) return
-  Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-    Box(
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(5.dp)
-        .clip(RoundedCornerShape(3.dp))
-        .background(MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-      Row(Modifier.fillMaxSize()) {
-        var cursor = 0L
-        for (u in record.utterances) {
-          val gap = (u.startMs - cursor).coerceAtLeast(0L)
-          if (gap > 0) {
-            Spacer(Modifier.weight((gap.toFloat() / durationMs).coerceAtLeast(0.001f)))
-          }
-          val span = (u.endMs - u.startMs).coerceAtLeast(80L)
-          Box(
-            modifier = Modifier
-              .weight((span.toFloat() / durationMs).coerceAtLeast(0.002f))
-              .height(5.dp)
-              .background(speakerAccentColor(u.speakerId)),
-          )
-          cursor = u.endMs
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(5.dp)
+      .clip(RoundedCornerShape(3.dp))
+      .background(MaterialTheme.colorScheme.surfaceVariant),
+  ) {
+    Row(Modifier.fillMaxSize()) {
+      var cursor = 0L
+      for (u in record.utterances) {
+        val gap = (u.startMs - cursor).coerceAtLeast(0L)
+        if (gap > 0) {
+          Spacer(Modifier.weight((gap.toFloat() / durationMs).coerceAtLeast(0.001f)))
         }
-        val tail = (durationMs - cursor).coerceAtLeast(0L)
-        if (tail > 0) {
-          Spacer(Modifier.weight((tail.toFloat() / durationMs).coerceAtLeast(0.001f)))
-        }
+        val span = (u.endMs - u.startMs).coerceAtLeast(80L)
+        Box(
+          modifier = Modifier
+            .weight((span.toFloat() / durationMs).coerceAtLeast(0.002f))
+            .height(5.dp)
+            .background(speakerAccentColor(u.speakerId)),
+        )
+        cursor = u.endMs
       }
-    }
-
-    // Индикаторная дорожка перебиваний и повышенного эмоционального тона (Idea #5)
-    val hasHotMoments = record.utterances.any { it.hasOverlap || it.prosodyTag == "intense" || it.prosodyTag == "elevated" }
-    if (hasHotMoments) {
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(3.dp)
-          .clip(RoundedCornerShape(2.dp))
-          .background( Color.Transparent),
-      ) {
-        Row(Modifier.fillMaxSize()) {
-          var cursor = 0L
-          for (u in record.utterances) {
-            val gap = (u.startMs - cursor).coerceAtLeast(0L)
-            if (gap > 0) {
-              Spacer(Modifier.weight((gap.toFloat() / durationMs).coerceAtLeast(0.001f)))
-            }
-            val span = (u.endMs - u.startMs).coerceAtLeast(80L)
-            val markerColor = when {
-              u.prosodyTag == "intense" -> Color(0xFFDC2626)
-              u.hasOverlap -> Color(0xFFF59E0B)
-              u.prosodyTag == "elevated" -> Color(0xFFEA580C)
-              else -> Color.Transparent
-            }
-            Box(
-              modifier = Modifier
-                .weight((span.toFloat() / durationMs).coerceAtLeast(0.002f))
-                .height(3.dp)
-                .background(markerColor),
-            )
-            cursor = u.endMs
-          }
-          val tail = (durationMs - cursor).coerceAtLeast(0L)
-          if (tail > 0) {
-            Spacer(Modifier.weight((tail.toFloat() / durationMs).coerceAtLeast(0.001f)))
-          }
-        }
+      val tail = (durationMs - cursor).coerceAtLeast(0L)
+      if (tail > 0) {
+        Spacer(Modifier.weight((tail.toFloat() / durationMs).coerceAtLeast(0.001f)))
       }
     }
   }
@@ -1084,23 +1042,6 @@ private fun DialogueTab(
           onClick = { onSpeakerFilterClick(null) },
           label = { Text("Все (${record.utterances.size})", fontSize = 12.sp, maxLines = 1, softWrap = false) },
         )
-        val hotCount = remember(record.utterances) {
-          record.utterances.count { it.hasOverlap || it.prosodyTag == "intense" || it.prosodyTag == "elevated" }
-        }
-        if (hotCount > 0) {
-          FilterChip(
-            selected = speakerFilter == "__hot__",
-            onClick = { onSpeakerFilterClick("__hot__") },
-            label = {
-              Text(
-                text = "⚡ Перебивания / Эмоции ($hotCount)",
-                fontSize = 12.sp,
-                maxLines = 1,
-                softWrap = false,
-              )
-            },
-          )
-        }
         record.speakers.forEach { spk ->
           FilterChip(
             selected = speakerFilter == spk,
@@ -1120,11 +1061,7 @@ private fun DialogueTab(
 
     val filtered = remember(record.utterances, searchQuery, speakerFilter) {
       record.utterances.filter { u ->
-        val matchesSpk = when (speakerFilter) {
-          null -> true
-          "__hot__" -> u.hasOverlap || u.prosodyTag == "intense" || u.prosodyTag == "elevated"
-          else -> u.speakerId == speakerFilter
-        }
+        val matchesSpk = speakerFilter == null || u.speakerId == speakerFilter
         matchesSpk && (searchQuery.isBlank() || u.text.contains(searchQuery, ignoreCase = true))
       }
     }
@@ -1216,51 +1153,6 @@ private fun UtteranceCard(
           maxLines = 1,
           softWrap = false,
         )
-      }
-
-      // Бейджи детекции перебиваний и эмоционального тона (Idea #5)
-      if (utterance.hasOverlap || utterance.prosodyTag != "calm") {
-        Spacer(Modifier.height(4.dp))
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          if (utterance.hasOverlap) {
-            Surface(
-              color = Color(0xFFF59E0B).copy(alpha = 0.18f),
-              shape = RoundedCornerShape(6.dp),
-            ) {
-              Text(
-                text = "⚡ Перебивание / Смена без паузы",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFFB45309),
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-              )
-            }
-          }
-          val prosodyBadge = when (utterance.prosodyTag) {
-            "intense" -> "🔥 Накал / Повышенный тон" to Color(0xFFDC2626)
-            "elevated" -> "🔥 Повышенный тон" to Color(0xFFEA580C)
-            "fast" -> "⏩ Быстрый темп речи" to Color(0xFF2563EB)
-            else -> null
-          }
-          if (prosodyBadge != null) {
-            val (badgeText, badgeColor) = prosodyBadge
-            Surface(
-              color = badgeColor.copy(alpha = 0.15f),
-              shape = RoundedCornerShape(6.dp),
-            ) {
-              Text(
-                text = badgeText,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = badgeColor,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-              )
-            }
-          }
-        }
       }
 
       Spacer(Modifier.height(6.dp))

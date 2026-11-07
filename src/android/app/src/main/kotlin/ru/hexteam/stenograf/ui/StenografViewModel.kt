@@ -46,7 +46,7 @@ data class StenografUiState(
   val progress: PipelineProgress? = null,
   val params: ProcessingParams = ProcessingParams(
     numSpeakers = 0,
-    clusterThreshold = 0.46f,
+    clusterThreshold = 0.50f,
     denoise = false,
     numThreads = 4,
   ),

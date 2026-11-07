@@ -8,16 +8,19 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import ru.hexteam.stenograf.audio.FloatArrayBuilder
+import ru.hexteam.stenograf.audio.Resampler
+import ru.hexteam.stenograf.audio.StreamingResampler
 import ru.hexteam.stenograf.audio.WavParser
 import ru.hexteam.stenograf.audio.WavWriter
 import ru.hexteam.stenograf.core.export.TranscriptExporter
 import ru.hexteam.stenograf.core.model.Utterance
-import ru.hexteam.stenograf.core.model.Word
 import ru.hexteam.stenograf.core.pipeline.DiarizationSlice
 import ru.hexteam.stenograf.core.pipeline.RawToken
 import ru.hexteam.stenograf.core.pipeline.TranscriptAligner
-import java.io.ByteArrayInputStream
 import java.io.File
+import kotlin.math.abs
+import kotlin.math.sin
 
 class TranscriptPipelineTest {
 
@@ -88,61 +91,40 @@ class TranscriptPipelineTest {
   }
 
   @Test
-  fun `Потоковый WavParser ресемплирует 48 кГц в 16 кГц на лету без лишних буферов`() {
+  fun `Потоковый StreamingResampler побитово совпадает с оконным sinc-фильтром Блэкмана Resampler`() {
+    val src48k = FloatArray(48_000) { i ->
+      (sin(i * 0.04) * 0.4 + sin(i * 0.21) * 0.3).toFloat()
+    }
+    val expected = Resampler.resample(src48k, 48_000, 16_000)
+    val outBuilder = FloatArrayBuilder(expected.size + 16)
+    val streaming = StreamingResampler(48_000, 16_000, outBuilder)
+    for (s in src48k) streaming.accept(s)
+    streaming.finish()
+    val actual = outBuilder.toExactArray()
+
+    assertEquals(expected.size, actual.size)
+    var maxDiff = 0f
+    for (i in expected.indices) {
+      val d = abs(expected[i] - actual[i])
+      if (d > maxDiff) maxDiff = d
+    }
+    assertTrue("Максимальное расхождение sinc-ресемплера = $maxDiff", maxDiff < 1e-5f)
+
     val tmp = File.createTempFile("test_48k_", ".wav")
     try {
-      // 2 секунды сигнала на частоте 48 000 Гц (96 000 отсчётов)
-      val src48k = FloatArray(96_000) { i -> kotlin.math.sin(i * 0.05).toFloat() * 0.5f }
       WavWriter.write(tmp, src48k, 48_000)
       val parsed = tmp.inputStream().use { WavParser.parse(it, targetSampleRate = 16_000) }
       assertNotNull(parsed)
       assertEquals(16_000, parsed!!.sampleRate)
-      // Ожидаем ~32 000 отсчётов (2 секунды * 16 000 Гц)
-      assertTrue("Размер=${parsed.samples.size}", parsed.samples.size in 31_990..32_010)
+      assertEquals(16_000, parsed.samples.size)
     } finally {
       tmp.delete()
     }
   }
 
   @Test
-  fun `Фильтрация шумовых одиночных кластеров сохраняет реальных 3 спикеров и убирает 4-й шумовой выброс`() {
-    // 8 реплик: спикеры 0, 1 и 2 ведут диалог, а одна микро-реплика (300 мс) ошибочно попала в кластер 99
-    val assigned = listOf(
-      Word("Привет", 0L, 4000L) to 0,
-      Word("Здравствуйте", 4500L, 9000L) to 1,
-      Word("Добрый", 9500L, 14000L) to 2,
-      Word("Начинаем", 14500L, 19000L) to 0,
-      Word("Отлично", 19500L, 24000L) to 1,
-      Word("Согласен", 24500L, 29000L) to 2,
-      Word("Эх", 29200L, 29500L) to 99, // Одиночный шумовой выброс 300 мс (4-й кластер)
-      Word("Продолжаем", 30000L, 35000L) to 1,
-    )
-    val utterances = TranscriptAligner.buildUtterances(assigned, filterMinorSpeakers = true)
-    val distinctSpeakers = utterances.map { it.speakerId }.distinct()
-    assertEquals(listOf("speaker_1", "speaker_2", "speaker_3"), distinctSpeakers)
-  }
-
-  @Test
-  fun `Парсинг кликабельных таймкодов из ИИ-протокола и детекция перебиваний`() {
+  fun `Парсинг кликабельных таймкодов из ИИ-протокола для перехода к аудиофрагменту`() {
     assertEquals(84_500L, TranscriptExporter.extractFirstTimestampMs("`[01:24.5]` **Говорящий 1**: Обсудили архитектуру."))
     assertEquals(12_900L, TranscriptExporter.extractFirstTimestampMs("[00:12.9] Говорящий 2: Принято."))
-
-    val sr = 16_000
-    val samples = FloatArray(sr * 6) { i ->
-      // Первые 3 секунды — обычная громкость (0.1), вторые 3 секунды — повышенный тон (0.45)
-      val amp = if (i < sr * 3) 0.10f else 0.45f
-      kotlin.math.sin(i * 0.1).toFloat() * amp
-    }
-    val rawUtterances = listOf(
-      Utterance(id = 1, speakerId = "speaker_1", startMs = 0L, endMs = 2800L, text = "Спокойная реплика."),
-      Utterance(id = 2, speakerId = "speaker_2", startMs = 2850L, endMs = 5800L, text = "Срочно исправляем ошибку!"),
-    )
-    val slices = listOf(
-      DiarizationSlice(0L, 3100L, 0),
-      DiarizationSlice(2700L, 5800L, 1), // перекрытие 400 мс (2700..3100)
-    )
-    val enriched = TranscriptAligner.enrichProsodyAndOverlaps(rawUtterances, slices, samples, sr)
-    assertTrue("Вторая реплика должна иметь флаг перебивания/наложения", enriched[1].hasOverlap)
-    assertEquals("intense", enriched[1].prosodyTag)
   }
 }
