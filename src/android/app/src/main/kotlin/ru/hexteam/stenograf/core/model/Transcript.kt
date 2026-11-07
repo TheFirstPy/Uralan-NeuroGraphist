@@ -8,6 +8,8 @@ data class Word(
   val text: String,
   val startMs: Long,
   val endMs: Long,
+  /** Перед словом стояло диалоговое тире (`—`) модели GigaAM v3, сигнализирующее о смене реплики. */
+  val turnBreakBefore: Boolean = false,
 )
 
 /** Реплика одного говорящего. */

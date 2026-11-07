@@ -96,6 +96,14 @@ class StenografViewModel(app: Application) : AndroidViewModel(app) {
       recommendedSpeakers = 3,
       recommendDenoise = false,
     ),
+    BuiltinSample(
+      id = "real_4_dela_podcast",
+      title = "Подкаст «Дела №67»: Позов, Ахмедова, Шастун",
+      subtitle = "Реальный видеоподкаст (2 мин фрагмент) · 3 говорящих (2 мужских + 1 женский голос)",
+      assetPath = "samples/real_4_dela_podcast.wav",
+      recommendedSpeakers = 0,
+      recommendDenoise = false,
+    ),
   )
 
   init {
