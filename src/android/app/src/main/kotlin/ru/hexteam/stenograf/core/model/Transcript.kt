@@ -21,12 +21,6 @@ data class Utterance(
   val words: List<Word> = emptyList(),
   /** Реплика была отредактирована пользователем вручную. */
   val edited: Boolean = false,
-  /** Признак перебивания или наложения голосов (одновременная речь / мгновенный перехват реплики). */
-  val hasOverlap: Boolean = false,
-  /** Интонационный/эмоциональный маркер: "calm", "elevated" (повышенный тон), "intense" (спор/накал), "fast" (быстрый темп). */
-  val prosodyTag: String = "calm",
-  /** Относительная громкость/энергия голоса относительно среднего уровня записи (1.0 — норма). */
-  val energyRatio: Float = 1.0f,
 )
 
 /** Длительность этапов обработки, мс. */
@@ -65,7 +59,7 @@ enum class QualityPreset(
 data class ProcessingParams(
   val qualityPreset: QualityPreset = QualityPreset.STANDARD,
   val numSpeakers: Int = 0,
-  val clusterThreshold: Float = 0.46f,
+  val clusterThreshold: Float = 0.50f,
   val denoise: Boolean = false,
   val numThreads: Int = 4,
 )

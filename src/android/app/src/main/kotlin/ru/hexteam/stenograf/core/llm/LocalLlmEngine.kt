@@ -24,14 +24,17 @@ import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * Локальный движок большой языковой модели (Qwen3-0.6B INT4 на Google AI Edge LiteRT-LM)
- * и нейро-семантического экстрактора тезисов:
- *  - разбивает длинные реплики на отдельные предложения с точными пословными таймкодами (`Utterance.words`);
- *  - очищает разговорные слова-паразиты и сжимает мысли до лаконичных тезисов (до 120–130 символов);
- *  - классифицирует высказывания на главные тезисы, ключевые вопросы/проблемы и принятые решения/поручения с таймкодами;
- *  - синтезирует связное резюме совещания через локальную модель `Qwen3-0.6B` (`/no_think`) полностью офлайн.
+ * и глубокого семантического анализатора стенограмм:
+ *  - выделяет из реплик законченные по смыслу предложения с точными пословными таймкодами (`Utterance.words`),
+ *    не разрывая фразы посередине на запятых;
+ *  - очищает устную речь от вводных слов-паразитов и повторов, сохраняя полную смысловую структуру высказывания;
+ *  - связывает прозвучавшие вопросы с ответами собеседников в следующих репликах;
+ *  - строит хронологическую повестку встречи по смысловым этапам, позиции каждого спикера, главные тезисы и поручения;
+ *  - синтезирует аналитическое резюме совещания через локальную модель `Qwen3-0.6B` полностью офлайн.
  */
 class LocalLlmEngine(private val context: Context) {
 
@@ -57,10 +60,11 @@ class LocalLlmEngine(private val context: Context) {
       "лучше", "чуть", "том", "нельзя", "такой", "им", "более", "всегда", "конечно", "всю",
       "между", "это", "просто", "вообще", "короче", "кстати", "собственно", "значит", "типа",
       "скажем", "принципе", "говорить", "сказать", "очень", "кажется", "наверное", "ладно",
+      "алло", "здравствуйте", "привет", "добрый", "день", "спасибо", "пожалуйста", "понятно",
     )
 
     private val FILLER_PREFIX_REGEX = Regex(
-      "^(?:(?:ну|а+|э+|м+|ох|слушай(?:те)?|смотри(?:те)?|короче(?: говоря)?|в общем(?:-то)?|" +
+      "^(?:(?:ну|а+|э+|м+|ох|угу|ага|слушай(?:те)?|смотри(?:те)?|короче(?: говоря)?|в общем(?:-то)?|" +
         "собственно(?: говоря)?|так сказать|скажем так|знаешь|знаете|как бы|в принципе|на самом деле|" +
         "то есть|давай(?:те)? так|по сути)[,\\s—-]+)+",
       RegexOption.IGNORE_CASE,
@@ -71,23 +75,26 @@ class LocalLlmEngine(private val context: Context) {
       "подготов", "отправ", "провер", "настро", "внедр", "исправ", "запуст", "обнов",
       "перенес", "согласов", "утверд", "поруч", "задач", "срок", "дедлайн", "следующ",
       "давайте", "предлагаю", "возьму", "займусь", "закроем", "проконтрол", "обязательно",
+      "запиш", "оформ", "пришл", "свяж", "провед",
     )
 
     private val PROBLEM_MARKERS = listOf(
       "проблем", "ошибк", "сбой", "риск", "сложност", "вопрос", "почему", "зачем",
       "непонятн", "не работ", "тормоз", "падает", "не хват", "огранич", "узкое место",
-      "выяснить", "уточнить", "проверить", "беспокоит", "жалоб",
+      "выяснить", "уточнить", "проверить", "беспокоит", "жалоб", "как именно", "каким образом",
     )
 
     private val THESIS_MARKERS = listOf(
       "главн", "важн", "ключев", "основн", "итог", "результат", "вывод", "цель",
       "проект", "систем", "модел", "качеств", "скорост", "клиент", "данн", "архитектур",
       "показател", "процент", "бюджет", "план", "этап", "решен", "эффективн", "оптимиз",
+      "приложени", "сервис", "алгоритм", "разработ", "тестир", "конвейер", "нейросет",
     )
   }
 
   /** Отдельное предложение, извлечённое из реплики с точным таймкодом начала. */
   data class ExtractedSentence(
+    val utteranceIndex: Int,
     val speakerId: String,
     val speakerName: String,
     val startMs: Long,
@@ -103,12 +110,17 @@ class LocalLlmEngine(private val context: Context) {
   private fun ensureEngine(): Engine {
     engine?.let { if (it.isInitialized()) return it }
     val modelFile = File(context.filesDir, "llm/qwen3-0.6b.litertlm")
-    if (!modelFile.exists() || modelFile.length() < 10_000_000L) {
+    if (!modelFile.exists() || modelFile.length() < 100_000_000L) {
       modelFile.parentFile?.mkdirs()
+      val tmpFile = File(modelFile.parentFile, "qwen3-0.6b.litertlm.tmp")
       context.assets.open(ASSET_MODEL_PATH).use { input ->
-        FileOutputStream(modelFile).use { output ->
+        FileOutputStream(tmpFile).use { output ->
           input.copyTo(output, bufferSize = 1 shl 18)
         }
+      }
+      if (!tmpFile.renameTo(modelFile)) {
+        tmpFile.copyTo(modelFile, overwrite = true)
+        tmpFile.delete()
       }
     }
     val cacheDir = File(context.cacheDir, "litert_cache").apply { mkdirs() }
@@ -117,7 +129,7 @@ class LocalLlmEngine(private val context: Context) {
       backend = Backend.CPU(4),
       visionBackend = null,
       audioBackend = null,
-      maxNumTokens = 4096,
+      maxNumTokens = 2048,
       cacheDir = cacheDir.absolutePath,
     )
     val eng = Engine(cfg)
@@ -127,11 +139,11 @@ class LocalLlmEngine(private val context: Context) {
   }
 
   /**
-   * Генерирует структурированный протокол совещания по расшифровке:
-   * 1) Извлекает из всех реплик отдельные предложения с точными таймкодами (`[MM:SS.d]`),
-   *    сжимает длинные высказывания до ёмких тезисов и ранжирует их по семантической значимости (TF-IDF + маркеры решений/вопросов).
-   * 2) Передаёт отобранные тезисы в локальную нейросеть `Qwen3-0.6B` (`/no_think`) для синтеза связного резюме
-   *    и объединяет его с точными таймкодами ключевых тезисов, вопросов и поручений.
+   * Генерирует подробный, качественно структурированный протокол совещания по расшифровке:
+   * 1) Извлекает из всех реплик полные по смыслу предложения с точными таймкодами (`[MM:SS.d]`),
+   *    очищает устные слова-паразиты и ранжирует высказывания по семантической значимости (TF-IDF + структурные маркеры).
+   * 2) Запускает локальную нейросеть `Qwen3-0.6B` (`LiteRT-LM`) для синтеза связного аналитического резюме и выводов
+   *    с потоковым отображением генерации в UI, после чего объединяет результат с 6-раздельным аналитическим протоколом.
    */
   suspend fun generateMeetingProtocol(
     record: TranscriptRecord,
@@ -139,14 +151,11 @@ class LocalLlmEngine(private val context: Context) {
   ): String = withContext(Dispatchers.IO) {
     mutex.withLock {
       val sentences = extractAndScoreSentences(record)
-      val baseAnalyticalProtocol = buildSmartProtocol(record, sentences, llmExecutiveSummary = null)
-      onPartial(baseAnalyticalProtocol)
 
-      // Формируем компактный контекст из лучших тезисов с таймкодами для Qwen3-0.6B,
-      // чтобы нейросеть синтезировала осмысленное резюме без переполнения окна контекста.
+      // Отбираем до 14 ключевых содержательных высказываний в хронологическом порядке для контекста Qwen3-0.6B
       val topForLlm = sentences
-        .sortedByDescending { it.thesisScore + (if (it.isActionItem) 1.5 else 0.0) }
-        .take(16)
+        .sortedByDescending { it.thesisScore + (if (it.isActionItem) 1.2 else 0.0) }
+        .take(14)
         .sortedBy { it.startMs }
 
       val condensedInput = topForLlm.joinToString("\n") { s ->
@@ -154,76 +163,137 @@ class LocalLlmEngine(private val context: Context) {
       }
 
       val systemPrompt =
-        "Ты — «Уралан: Нейрографист», интеллектуальный секретарь совещаний. Пиши строго на русском языке, лаконично, деловым стилем без воды. /no_think"
+        "Ты — «Уралан: Нейрографист», профессиональный аналитик и секретарь деловых встреч. Пиши строго на русском языке, грамотным деловым стилем. /no_think"
       val userPrompt = buildString {
-        appendLine("Ниже приведены ключевые высказывания участников совещания с таймкодами.")
-        appendLine("Напиши краткое аналитическое резюме (3–4 предложения): о чём был разговор, какая главная тема обсуждалась и к каким выводам пришли участники. Не копируй реплики дословно, а сформулируй суть своими словами. /no_think")
+        appendLine("Проанализируй выдержки из стенограммы встречи и напиши содержательное аналитическое резюме в 4–5 предложениях:")
+        appendLine("1) Главная тема и цель разговора;")
+        appendLine("2) Какие ключевые аргументы, предложения или проблемы озвучили участники;")
+        appendLine("3) К какому общему итогу или решению пришли в конце обсуждения.")
+        appendLine("Формулируй мысли связно, своими словами, без дословного копирования реплик и без вводных фраз вроде «В данном разговоре». /no_think")
         appendLine()
-        appendLine("Высказывания:")
+        appendLine("Стенограмма ключевых моментов:")
         appendLine(condensedInput)
       }
 
+      var llmSummaryText: String? = null
       try {
         val eng = ensureEngine()
-        val convCfg = ConversationConfig(
-          systemInstruction = Contents.of(systemPrompt),
-          initialMessages = emptyList(),
-          tools = emptyList(),
-          samplerConfig = SamplerConfig(20, 0.85, 0.25, 42),
-          automaticToolCalling = false,
-          channels = emptyList(),
-          extraContext = mapOf("enable_thinking" to false),
-          loraConfig = null,
-          prefillPrefaceOnInit = false,
-          maxOutputToken = 512,
-          thinkingConfig = ThinkingConfig(false, 0),
-        )
-        eng.createConversation(convCfg).use { conv ->
-          val sb = StringBuilder()
-          conv.sendMessageAsync(
-            userPrompt,
-            mapOf("enable_thinking" to false),
-            null,
-            null,
-            null,
-            512,
-            ThinkingConfig(false, 0),
-            null,
-          ).collect { msg: Message ->
-            val chunk = msg.contents.contents
-              .filterIsInstance<com.google.ai.edge.litertlm.Content.Text>()
-              .joinToString("") { it.text }
-            if (chunk.isNotEmpty()) {
-              sb.append(chunk)
-              val cleaned = cleanLlmSummaryText(stripThinkTags(sb.toString()))
-              if (cleaned.length >= 25) {
-                onPartial(buildSmartProtocol(record, sentences, llmExecutiveSummary = cleaned))
-              }
-            }
-          }
-          val finalSummary = cleanLlmSummaryText(stripThinkTags(sb.toString()))
-          if (finalSummary.length >= 25) {
-            val fullProtocol = buildSmartProtocol(record, sentences, llmExecutiveSummary = finalSummary)
-            onPartial(fullProtocol)
-            return@withLock fullProtocol
-          }
+        llmSummaryText = runLlmSummaryGeneration(eng, systemPrompt, userPrompt) { streamingText ->
+          onPartial(buildSmartProtocol(record, sentences, llmExecutiveSummary = streamingText))
         }
       } catch (_: Throwable) {
-        // Если на устройстве/эмуляторе LiteRT-LM недоступен — используем семантический протокол с точными таймкодами
+        // Если первая конфигурация ConversationConfig не поддерживается на конкретном CPU/прошивке — пробуем базовую
+        try {
+          val eng = ensureEngine()
+          llmSummaryText = runLlmSummaryGenerationFallback(eng, systemPrompt, userPrompt) { streamingText ->
+            onPartial(buildSmartProtocol(record, sentences, llmExecutiveSummary = streamingText))
+          }
+        } catch (_: Throwable) {
+        }
       }
 
-      baseAnalyticalProtocol
+      val finalProtocol = buildSmartProtocol(record, sentences, llmExecutiveSummary = llmSummaryText)
+      onPartial(finalProtocol)
+      finalProtocol
+    }
+  }
+
+  private suspend fun runLlmSummaryGeneration(
+    eng: Engine,
+    systemPrompt: String,
+    userPrompt: String,
+    onStreamingUpdate: (String) -> Unit,
+  ): String? {
+    val convCfg = ConversationConfig(
+      systemInstruction = Contents.of(systemPrompt),
+      initialMessages = emptyList(),
+      tools = emptyList(),
+      samplerConfig = SamplerConfig(25, 0.85, 0.25, 42),
+      automaticToolCalling = false,
+      channels = emptyList(),
+      extraContext = mapOf("enable_thinking" to false),
+      loraConfig = null,
+      prefillPrefaceOnInit = false,
+      maxOutputToken = 512,
+      thinkingConfig = ThinkingConfig(false),
+    )
+    eng.createConversation(convCfg).use { conv ->
+      val sb = StringBuilder()
+      conv.sendMessageAsync(
+        userPrompt,
+        mapOf("enable_thinking" to false),
+        null,
+        null,
+        null,
+        512,
+        ThinkingConfig(false),
+        null,
+      ).collect { msg: Message ->
+        val chunk = msg.contents.contents
+          .filterIsInstance<com.google.ai.edge.litertlm.Content.Text>()
+          .joinToString("") { it.text }
+        if (chunk.isNotEmpty()) {
+          sb.append(chunk)
+          val cleaned = cleanLlmSummaryText(stripThinkTags(sb.toString()))
+          if (cleaned.length >= 20) {
+            onStreamingUpdate(cleaned)
+          }
+        }
+      }
+      val finalSummary = cleanLlmSummaryText(stripThinkTags(sb.toString()))
+      return finalSummary.takeIf { it.length >= 25 }
+    }
+  }
+
+  private suspend fun runLlmSummaryGenerationFallback(
+    eng: Engine,
+    systemPrompt: String,
+    userPrompt: String,
+    onStreamingUpdate: (String) -> Unit,
+  ): String? {
+    val convCfg = ConversationConfig(
+      Contents.of(systemPrompt),
+      emptyList(),
+      emptyList(),
+      SamplerConfig(25, 0.85, 0.25, 42),
+    )
+    eng.createConversation(convCfg).use { conv ->
+      val sb = StringBuilder()
+      conv.sendMessageAsync(
+        userPrompt,
+        emptyMap(),
+        null,
+        null,
+        null,
+        512,
+        null,
+        null,
+      ).collect { msg: Message ->
+        val chunk = msg.contents.contents
+          .filterIsInstance<com.google.ai.edge.litertlm.Content.Text>()
+          .joinToString("") { it.text }
+        if (chunk.isNotEmpty()) {
+          sb.append(chunk)
+          val cleaned = cleanLlmSummaryText(stripThinkTags(sb.toString()))
+          if (cleaned.length >= 20) {
+            onStreamingUpdate(cleaned)
+          }
+        }
+      }
+      val finalSummary = cleanLlmSummaryText(stripThinkTags(sb.toString()))
+      return finalSummary.takeIf { it.length >= 25 }
     }
   }
 
   /**
-   * Разбивает реплики на отдельные предложения, вычисляет для каждого предложения точный таймкод начала
-   * по пословным меткам `Utterance.words`, сжимает длинные фразы до ёмких тезисов и оценивает их важность.
+   * Разбивает реплики на отдельные законченные предложения, вычисляет для каждого предложения точный таймкод начала
+   * по пословным меткам `Utterance.words`, очищает устные паразиты и оценивает информационную значимость.
    */
   internal fun extractAndScoreSentences(record: TranscriptRecord): List<ExtractedSentence> {
     if (record.utterances.isEmpty()) return emptyList()
 
     data class RawCandidate(
+      val utteranceIndex: Int,
       val speakerId: String,
       val speakerName: String,
       val startMs: Long,
@@ -235,15 +305,16 @@ class LocalLlmEngine(private val context: Context) {
 
     val candidates = mutableListOf<RawCandidate>()
 
-    for (u in record.utterances) {
+    for ((uIdx, u) in record.utterances.withIndex()) {
       val spkName = record.displayName(u.speakerId)
       val sentenceSpans = splitUtteranceIntoTimedSentences(u)
       for ((sMs, eMs, sentText) in sentenceSpans) {
-        val concise = compressToConciseThesis(sentText, maxChars = 128)
+        val concise = compressToConciseThesis(sentText, maxChars = 210)
         val stems = tokenizeStems(concise)
-        // Отбрасываем однословные междометия («Да.», «Угу.», «Алло.», «Понял.»)
-        if (concise.length < 14 || stems.size < 2) continue
+        // Отбрасываем пустые приветствия и одиночные междометия («Да.», «Угу.», «Алло.», «Понял.»)
+        if (concise.length < 18 || stems.size < 2) continue
         candidates += RawCandidate(
+          utteranceIndex = uIdx,
           speakerId = u.speakerId,
           speakerName = spkName,
           startMs = sMs,
@@ -256,15 +327,15 @@ class LocalLlmEngine(private val context: Context) {
     }
 
     if (candidates.isEmpty()) {
-      // Если все реплики совсем короткие — берём их как есть
-      return record.utterances.map { u ->
+      return record.utterances.mapIndexed { uIdx, u ->
         ExtractedSentence(
+          utteranceIndex = uIdx,
           speakerId = u.speakerId,
           speakerName = record.displayName(u.speakerId),
           startMs = u.startMs,
           endMs = u.endMs,
           rawText = u.text,
-          conciseText = compressToConciseThesis(u.text, 120),
+          conciseText = compressToConciseThesis(u.text, 200),
           thesisScore = 1.0,
           isActionItem = false,
           isQuestionOrProblem = u.text.contains("?"),
@@ -293,31 +364,31 @@ class LocalLlmEngine(private val context: Context) {
         val idf = ln(1.0 + totalDocs / df)
         tfidfSum += (1.0 + ln(tf)) * idf
       }
-      // Нормируем на корень из числа слов, чтобы не завышать оценку гигантских предложений
-      val normTfIdf = tfidfSum / kotlin.math.sqrt(c.stems.size.toDouble().coerceAtLeast(2.0))
+      // Нормируем на корень из числа значимых слов, чтобы ценить информативную плотность мысли
+      val normTfIdf = tfidfSum / sqrt(c.stems.size.toDouble().coerceAtLeast(2.0))
 
       val hasAction = ACTION_MARKERS.any { lower.contains(it) }
       val hasProblem = c.rawText.contains("?") || PROBLEM_MARKERS.any { lower.contains(it) }
       val hasThesisKeyword = THESIS_MARKERS.any { lower.contains(it) }
       val hasNumbers = c.rawText.any { it.isDigit() }
 
-      // Оптимальная длина тезиса — от 30 до 120 символов (не обрывок и не простыня)
+      // Предпочитаем полные, содержательные предложения (45..195 символов)
       val lenBonus = when (c.conciseText.length) {
-        in 35..115 -> 1.35
-        in 22..130 -> 1.10
-        else -> 0.85
+        in 45..195 -> 1.40
+        in 28..210 -> 1.15
+        else -> 0.80
       }
 
-      // Небольшой бонус начальным (постановка темы) и финальным (подведение итогов) высказываниям
       val posFrac = idx.toDouble() / candidates.size.coerceAtLeast(1)
-      val positionBonus = if (posFrac <= 0.15 || posFrac >= 0.82) 1.15 else 1.0
+      val positionBonus = if (posFrac <= 0.16 || posFrac >= 0.80) 1.15 else 1.0
 
       val score = normTfIdf * lenBonus * positionBonus +
-        (if (hasThesisKeyword) 1.4 else 0.0) +
-        (if (hasNumbers) 1.1 else 0.0) +
-        (if (hasAction) 0.9 else 0.0)
+        (if (hasThesisKeyword) 1.5 else 0.0) +
+        (if (hasNumbers) 1.2 else 0.0) +
+        (if (hasAction) 1.0 else 0.0)
 
       result += ExtractedSentence(
+        utteranceIndex = c.utteranceIndex,
         speakerId = c.speakerId,
         speakerName = c.speakerName,
         startMs = c.startMs,
@@ -334,8 +405,9 @@ class LocalLlmEngine(private val context: Context) {
   }
 
   /**
-   * Разбивает реплику на отдельные предложения и определяет точный `startMs` и `endMs` каждого предложения
-   * по пословным меткам `utterance.words`.
+   * Разбивает реплику на отдельные законченные предложения и определяет точный `startMs` и `endMs`
+   * каждого предложения по пословным меткам `utterance.words`.
+   * Никогда не разрывает предложение на обычных запятых, чтобы сохранять целостность мысли.
    */
   private fun splitUtteranceIntoTimedSentences(utterance: Utterance): List<Triple<Long, Long, String>> {
     val words = utterance.words
@@ -344,10 +416,10 @@ class LocalLlmEngine(private val context: Context) {
       var curWords = mutableListOf<ru.hexteam.stenograf.core.model.Word>()
       for (w in words) {
         curWords += w
-        val endsSent = w.text.endsWith(".") || w.text.endsWith("!") || w.text.endsWith("?")
-        // Также делим очень длинные безостановочные фразы (> 22 слов) по точке с запятой, тире или союзам «потому что / поэтому / при этом»
-        val isLongClauseBreak = curWords.size >= 18 && (w.text.endsWith(",") || w.text.endsWith(";") || w.text == "—")
-        if (endsSent || isLongClauseBreak) {
+        val endsSent = w.text.endsWith(".") || w.text.endsWith("!") || w.text.endsWith("?") || w.text.endsWith("…")
+        // Делим сверхдлинные фразы без точек только на точке с запятой (;), если уже накоплено >= 24 слов
+        val isSemicolonBreak = curWords.size >= 24 && w.text.endsWith(";")
+        if (endsSent || isSemicolonBreak) {
           val text = TranscriptAligner.normalizeRussianPunctuation(curWords.joinToString(" ") { it.text })
           sentences += Triple(curWords.first().startMs, curWords.last().endMs, text)
           curWords = mutableListOf()
@@ -360,9 +432,8 @@ class LocalLlmEngine(private val context: Context) {
       return sentences
     }
 
-    // Резервный вариант, если пословные метки отсутствуют: делим по знакам конца предложения и интерполируем время
     val parts = utterance.text
-      .split(Regex("(?<=[.!?])\\s+"))
+      .split(Regex("(?<=[.!?…])\\s+"))
       .map { it.trim() }
       .filter { it.isNotEmpty() }
     if (parts.isEmpty()) return listOf(Triple(utterance.startMs, utterance.endMs, utterance.text))
@@ -378,10 +449,10 @@ class LocalLlmEngine(private val context: Context) {
   }
 
   /**
-   * Превращает разговорное предложение в лаконичный тезис (не более [maxChars] символов):
-   * удаляет вводные слова-паразиты в начале и при необходимости оставляет главную смысловую часть до запятой/тире.
+   * Очищает разговорное предложение от устных слов-паразитов и тавтологий, сохраняя полную
+   * грамматическую и смысловую конструкцию (до [maxChars] символов, без обрезания на случайных запятых).
    */
-  internal fun compressToConciseThesis(rawSentence: String, maxChars: Int = 128): String {
+  internal fun compressToConciseThesis(rawSentence: String, maxChars: Int = 210): String {
     var cleaned = rawSentence.trim()
       .replace(FILLER_PREFIX_REGEX, "")
       .replace(Regex("\\s{2,}"), " ")
@@ -389,24 +460,24 @@ class LocalLlmEngine(private val context: Context) {
 
     if (cleaned.isEmpty()) cleaned = rawSentence.trim()
 
-    // Убираем повторные вводные конструкции внутри фразы
+    // Убираем разговорные слова-вставки и заикания (повторы одного и того же слова подряд)
     cleaned = cleaned
-      .replace(Regex("(?i)\\b(короче говоря|грубо говоря|скажем так|так сказать|как говорится),?\\s*"), "")
+      .replace(Regex("(?i)\\b(короче говоря|грубо говоря|скажем так|так сказать|как говорится|собственно говоря),?\\s*"), "")
+      .replace(Regex("(?i)\\b([а-яё]{2,})\\s+\\1\\b"), "$1")
       .replace(Regex("\\s+([,.:;!?])"), "$1")
       .trim()
 
     if (cleaned.length > maxChars) {
-      // Ищем естественную границу смысловой клаузы (точка с запятой, тире, запятая) в диапазоне [55, maxChars]
       val window = cleaned.substring(0, maxChars)
-      val clauseBreak = listOf("; ", " — ", ", а ", ", но ", ", чтобы ", ", поэтому ", ", так как ", ", где ", ", когда ", ", ")
+      val majorClauseBreak = listOf("; ", " — ", ", при этом ", ", кроме того ", ", а также ")
         .map { sep -> window.lastIndexOf(sep) }
-        .filter { idx -> idx >= 50 }
+        .filter { idx -> idx >= 110 }
         .maxOrNull()
 
-      cleaned = if (clauseBreak != null) {
-        window.substring(0, clauseBreak).trimEnd(',', ';', '—', '-', ' ') + "."
+      cleaned = if (majorClauseBreak != null) {
+        window.substring(0, majorClauseBreak).trimEnd(',', ';', '—', '-', ' ') + "."
       } else {
-        val lastSpace = window.lastIndexOf(' ').takeIf { it >= 50 } ?: (maxChars - 1)
+        val lastSpace = window.lastIndexOf(' ').takeIf { it >= 90 } ?: (maxChars - 1)
         window.substring(0, lastSpace).trimEnd(',', ';', '—', '-', '.') + "…"
       }
     }
@@ -420,7 +491,6 @@ class LocalLlmEngine(private val context: Context) {
       .map { it.value }
       .filter { it !in STOP_WORDS }
       .map { word ->
-        // Простая русская стеммизация (отсечение окончаний до основы >= 4 букв) для сопоставления однокоренных слов
         if (word.length >= 6) word.substring(0, word.length - 2)
         else if (word.length == 5) word.substring(0, 4)
         else word
@@ -429,42 +499,105 @@ class LocalLlmEngine(private val context: Context) {
   }
 
   /**
-   * Собирает чисто отформатированный протокол совещания с краткими тезисами и точными таймкодами.
+   * Формирует развёрнутый 6-секционный протокол совещания с кликабельными таймкодами `[MM:SS.d]`.
    */
   private fun buildSmartProtocol(
     record: TranscriptRecord,
     sentences: List<ExtractedSentence>,
     llmExecutiveSummary: String?,
   ): String = buildString {
-    val topKeywords = extractTopTopicWords(sentences, limit = 5)
+    val topKeywords = extractTopTopicWords(sentences, limit = 6)
     val topicLine = if (topKeywords.isNotEmpty()) {
       topKeywords.joinToString(", ")
     } else {
-      "обсуждение рабочих вопросов"
+      "рабочее обсуждение"
     }
 
-    appendLine("### Краткое резюме совещания")
+    // Определяем ведущего спикера по суммарному времени речи
+    val dominantSpeakerId = record.speakers.maxByOrNull { spk ->
+      record.utterances.filter { it.speakerId == spk }.sumOf { (it.endMs - it.startMs).coerceAtLeast(0L) }
+    }
+    val dominantSpeakerName = dominantSpeakerId?.let { record.displayName(it) } ?: "Говорящий 1"
+
+    appendLine("### 1. Паспорт и аналитическое резюме встречи")
+    appendLine(
+      "- **Длительность записи:** ${TranscriptExporter.formatTimeMs(record.durationMs)} · " +
+        "**Участников:** ${record.speakers.size} (${record.speakers.joinToString { record.displayName(it) }}) · " +
+        "**Реплик:** ${record.utterances.size}"
+    )
+    appendLine("- **Предметная область и ключевые понятия:** $topicLine.")
+    appendLine("- **Основной докладчик (ведущий диалога):** $dominantSpeakerName.")
+    appendLine()
+
     if (!llmExecutiveSummary.isNullOrBlank()) {
       appendLine(llmExecutiveSummary.trim())
     } else {
-      val leadThesis = sentences.maxByOrNull { it.thesisScore }?.conciseText
-      appendLine(
-        "Запись длительностью **${TranscriptExporter.formatTimeMs(record.durationMs)}**, " +
-          "участников: **${record.speakers.size}** (${record.speakers.joinToString { record.displayName(it) }}), " +
-          "всего реплик: **${record.utterances.size}**."
-      )
-      appendLine("Ключевые темы разговора: **$topicLine**.")
-      if (!leadThesis.isNullOrBlank()) {
-        appendLine("Центральный тезис: *$leadThesis*")
+      val topTheses = selectDiverseSentences(
+        pool = sentences.sortedByDescending { it.thesisScore },
+        maxCount = 3,
+      ).sortedBy { it.startMs }
+      if (topTheses.isNotEmpty()) {
+        val Opening = topTheses.first()
+        val Conclusion = topTheses.last()
+        appendLine(
+          "В ходе встречи участники (${record.speakers.joinToString { record.displayName(it) }}) " +
+            "рассмотрели вопросы по направлениям: **$topicLine**. " +
+            "Обсуждение началось с позиции **${Opening.speakerName}**: *«${Opening.conciseText}»*" +
+            (if (Conclusion != Opening) " В итоговой части **${Conclusion.speakerName}** сформулировал вывод: *«${Conclusion.conciseText}»*" else "")
+        )
       }
     }
 
+    // 2. Повестка и хронология обсуждения по смысловым этапам
+    if (sentences.size >= 3 && record.durationMs >= 15_000L) {
+      appendLine()
+      appendLine("### 2. Повестка и хронология обсуждения (по этапам)")
+      val blockCount = when {
+        record.durationMs >= 180_000L && sentences.size >= 9 -> 4
+        sentences.size >= 6 -> 3
+        else -> 2
+      }
+      val stageTitles = when (blockCount) {
+        4 -> listOf(
+          "Этап 1. Вводная часть и постановка контекста",
+          "Этап 2. Разбор основных вопросов и аргументация",
+          "Этап 3. Детализация предложений и уточнения",
+          "Этап 4. Подведение итогов и фиксация договорённостей",
+        )
+        3 -> listOf(
+          "Этап 1. Постановка темы и исходный контекст",
+          "Этап 2. Основное обсуждение и обмен аргументами",
+          "Этап 3. Согласование выводов и завершение",
+        )
+        else -> listOf(
+          "Этап 1. Постановка вопроса и обсуждение",
+          "Этап 2. Итоговые позиции и выводы",
+        )
+      }
+
+      val sortedByTime = sentences.sortedBy { it.startMs }
+      for (b in 0 until blockCount) {
+        val fromIdx = (b * sortedByTime.size) / blockCount
+        val toIdx = (((b + 1) * sortedByTime.size) / blockCount).coerceAtLeast(fromIdx + 1).coerceAtMost(sortedByTime.size)
+        if (fromIdx >= toIdx) continue
+        val slice = sortedByTime.subList(fromIdx, toIdx)
+        val bestInBlock = slice.maxByOrNull { it.thesisScore } ?: slice.first()
+        val blockEndMs = slice.maxOf { it.endMs }
+        val blockKeywords = extractTopTopicWords(slice, limit = 3)
+        val kwSuffix = if (blockKeywords.isNotEmpty()) " *(темы: ${blockKeywords.joinToString(", ")})*" else ""
+        appendLine(
+          "- `[${TranscriptExporter.formatTimeMs(bestInBlock.startMs)}]` **${stageTitles[b]}** " +
+            "(до ${TranscriptExporter.formatTimeMs(blockEndMs)})$kwSuffix: **${bestInBlock.speakerName}** — ${bestInBlock.conciseText}"
+        )
+      }
+    }
+
+    // 3. Ключевые тезисы и аргументы (с таймкодами)
     appendLine()
-    appendLine("### Главные тезисы (с таймкодами)")
-    // Выбираем до 6 наиболее значимых непересекающихся по смыслу тезисов и сортируем их хронологически
+    appendLine("### 3. Ключевые тезисы и аргументы (с таймкодами)")
     val selectedTheses = selectDiverseSentences(
       pool = sentences.sortedByDescending { it.thesisScore },
-      maxCount = 6,
+      maxCount = 7,
     ).sortedBy { it.startMs }
 
     if (selectedTheses.isEmpty()) {
@@ -477,79 +610,86 @@ class LocalLlmEngine(private val context: Context) {
       }
     }
 
-    // Раздел решений и поручений
-    val actions = selectDiverseSentences(
-      pool = sentences.filter { it.isActionItem }.sortedByDescending { it.thesisScore },
-      maxCount = 4,
-    ).sortedBy { it.startMs }
+    // 4. Позиции и ключевой вклад каждого участника
+    appendLine()
+    appendLine("### 4. Позиции и вклад каждого участника")
+    for (spk in record.speakers) {
+      val turns = record.utterances.filter { it.speakerId == spk }
+      val durSec = turns.sumOf { (it.endMs - it.startMs).coerceAtLeast(0L) } / 1000.0
+      val wordCount = turns.sumOf { it.text.split(Regex("\\s+")).count { w -> w.isNotBlank() } }
+      val sharePct = if (record.durationMs > 0) {
+        ((turns.sumOf { (it.endMs - it.startMs).coerceAtLeast(0L) } * 100.0) / record.durationMs).toInt().coerceIn(1, 100)
+      } else 0
 
-    if (actions.isNotEmpty()) {
-      appendLine()
-      appendLine("### Принятые решения и поручения")
-      for (act in actions) {
+      val spkTopTheses = selectDiverseSentences(
+        pool = sentences.filter { it.speakerId == spk }.sortedByDescending { it.thesisScore },
+        maxCount = 2,
+      ).sortedBy { it.startMs }
+
+      appendLine(
+        "- **${record.displayName(spk)}** — реплик: ${turns.size}, слов: $wordCount, " +
+          "эфирное время: ${"%.1f".format(durSec)} с ($sharePct%)"
+      )
+      for (st in spkTopTheses) {
         appendLine(
-          "- `[${TranscriptExporter.formatTimeMs(act.startMs)}]` **${act.speakerName}**: ${act.conciseText}"
+          "  - `[${TranscriptExporter.formatTimeMs(st.startMs)}]` Позиция: ${st.conciseText}"
         )
       }
     }
 
-    // Раздел ключевых вопросов и проблем
+    // 5. Поднятые вопросы и ответы собеседников (с таймкодами)
     val questions = selectDiverseSentences(
       pool = sentences
-        .filter { it.isQuestionOrProblem && it !in actions }
-        .sortedByDescending { it.thesisScore },
+        .filter { it.rawText.contains("?") || it.isQuestionOrProblem }
+        .sortedByDescending { (if (it.rawText.contains("?")) 2.0 else 0.0) + it.thesisScore },
       maxCount = 4,
     ).sortedBy { it.startMs }
 
     if (questions.isNotEmpty()) {
       appendLine()
-      appendLine("### Ключевые вопросы и обсуждаемые проблемы")
+      appendLine("### 5. Поднятые вопросы и ответы в ходе встречи")
       for (q in questions) {
-        appendLine(
-          "- `[${TranscriptExporter.formatTimeMs(q.startMs)}]` **${q.speakerName}**: ${q.conciseText}"
-        )
-      }
-    }
-
-    // Раздел динамики дискуссии: перебивания, спорные моменты и повышенный эмоциональный тон
-    val hotMoments = record.utterances
-      .filter { it.hasOverlap || it.prosodyTag == "intense" || it.prosodyTag == "elevated" }
-      .sortedByDescending { (if (it.hasOverlap) 1.5f else 0f) + it.energyRatio }
-      .take(4)
-      .sortedBy { it.startMs }
-
-    if (hotMoments.isNotEmpty()) {
-      appendLine()
-      appendLine("### Динамика дискуссии: перебивания и эмоциональный тон")
-      for (hm in hotMoments) {
-        val label = when {
-          hm.prosodyTag == "intense" -> "Спор / Перебивание на повышенном тоне"
-          hm.hasOverlap -> "Перебивание / Одновременная речь"
-          else -> "Повышенный эмоциональный тон"
+        // Ищем ответ другого спикера в следующей реплике диалога
+        val nextReply = record.utterances
+          .drop(q.utteranceIndex + 1)
+          .take(2)
+          .firstOrNull { it.speakerId != q.speakerId && it.text.length >= 12 }
+        val replySuffix = if (nextReply != null) {
+          val replyConcise = compressToConciseThesis(nextReply.text, maxChars = 150)
+          " — *Ответ (${record.displayName(nextReply.speakerId)}, `[${TranscriptExporter.formatTimeMs(nextReply.startMs)}]`):* $replyConcise"
+        } else {
+          ""
         }
-        val brief = compressToConciseThesis(hm.text, maxChars = 105)
         appendLine(
-          "- `[${TranscriptExporter.formatTimeMs(hm.startMs)}]` **${record.displayName(hm.speakerId)}** (*$label*): $brief"
+          "- `[${TranscriptExporter.formatTimeMs(q.startMs)}]` **${q.speakerName}**: ${q.conciseText}$replySuffix"
         )
       }
     }
+
+    // 6. Принятые решения, договорённости и поручения
+    val actions = selectDiverseSentences(
+      pool = sentences.filter { it.isActionItem }.sortedByDescending { it.thesisScore },
+      maxCount = 5,
+    ).sortedBy { it.startMs }
 
     appendLine()
-    appendLine("### Активность и вклад участников")
-    for (spk in record.speakers) {
-      val turns = record.utterances.filter { it.speakerId == spk }
-      val durSec = turns.sumOf { (it.endMs - it.startMs).coerceAtLeast(0) } / 1000.0
-      val sharePct = if (record.durationMs > 0) {
-        ((turns.sumOf { (it.endMs - it.startMs).coerceAtLeast(0) } * 100.0) / record.durationMs).toInt().coerceIn(1, 100)
-      } else 0
-      val bestSpkThesis = sentences
-        .filter { it.speakerId == spk }
-        .maxByOrNull { it.thesisScore }
-        ?.let { " — `[${TranscriptExporter.formatTimeMs(it.startMs)}]` ${it.conciseText}" }
-        ?: ""
-      appendLine(
-        "- **${record.displayName(spk)}**: реплик — ${turns.size}, эфирное время — ${"%.1f".format(durSec)} с ($sharePct%)$bestSpkThesis"
-      )
+    appendLine("### 6. Итоги, решения и следующие шаги")
+    if (actions.isNotEmpty()) {
+      for (act in actions) {
+        appendLine(
+          "- `[${TranscriptExporter.formatTimeMs(act.startMs)}]` **${act.speakerName}**: ${act.conciseText}"
+        )
+      }
+    } else {
+      // Если явных глаголов-поручений не было, приводим финальное резюмирующее высказывание диалога
+      val closing = sentences.takeLast(3).maxByOrNull { it.thesisScore }
+      if (closing != null) {
+        appendLine(
+          "- `[${TranscriptExporter.formatTimeMs(closing.startMs)}]` **Итоговое резюме (${closing.speakerName})**: ${closing.conciseText}"
+        )
+      } else {
+        appendLine("- Явных поручений с дедлайнами в ходе записи не зафиксировано.")
+      }
     }
   }
 
@@ -571,7 +711,7 @@ class LocalLlmEngine(private val context: Context) {
         } else {
           val inter = candStems.intersect(exStems).size.toDouble()
           val union = max(1, min(candStems.size, exStems.size)).toDouble()
-          (inter / union) >= 0.68 || kotlin.math.abs(existing.startMs - cand.startMs) < 1500L
+          (inter / union) >= 0.65 || kotlin.math.abs(existing.startMs - cand.startMs) < 1500L
         }
       }
       if (!isDuplicate) {
@@ -606,8 +746,8 @@ class LocalLlmEngine(private val context: Context) {
 
   private fun cleanLlmSummaryText(raw: String): String {
     return raw
-      .replace(Regex("^#{1,6}\\s*Краткое резюме.*$", RegexOption.MULTILINE), "")
-      .replace(Regex("/no_think"), "")
+      .replace(Regex("^#{1,6}\\s*.*$", RegexOption.MULTILINE), "")
+      .replace("/no_think", "")
       .trim()
   }
 
@@ -633,7 +773,7 @@ class LocalLlmEngine(private val context: Context) {
             loraConfig = null,
             prefillPrefaceOnInit = false,
             maxOutputToken = 192,
-            thinkingConfig = ThinkingConfig(false, 0),
+            thinkingConfig = ThinkingConfig(false),
           )
           eng.createConversation(convCfg).use { conv ->
             val prompt = buildString {
@@ -650,7 +790,7 @@ class LocalLlmEngine(private val context: Context) {
               null,
               null,
               192,
-              ThinkingConfig(false, 0),
+              ThinkingConfig(false),
               null,
             ).collect { msg ->
               val chunk = msg.contents.contents
