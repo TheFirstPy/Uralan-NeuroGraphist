@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Золотой солнечный диск-ореол («Уралан» — калмыцкое солнце и движение вперёд) -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M54,24 C67.8,24 79.5,33.3 83.0,46.0 L77.8,46.0 C74.5,36.1 65.1,29.0 54.0,29.0 C42.9,29.0 33.5,36.1 30.2,46.0 L25.0,46.0 C28.5,33.3 40.2,24.0 54.0,24.0 Z" />
+
+    <!-- Три акустические звуковые волны разных спикеров (диаризация голосов) -->
+    <!-- Спикер 1 (бирюзовый) -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M28,43 C29.7,43 31,44.3 31,46 L31,62 C31,63.7 29.7,65 28,65 C26.3,65 25,63.7 25,62 L25,46 C25,44.3 26.3,43 28,43 Z" />
+
+    <!-- Спикер 2 (изумрудный) -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M37,36 C38.7,36 40,37.3 40,39 L40,69 C40,70.7 38.7,72 37,72 C35.3,72 34,70.7 34,69 L34,39 C34,37.3 35.3,36 37,36 Z" />
+
+    <!-- Спикер 3 (золотой) -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M46,41 C47.7,41 49,42.3 49,44 L49,64 C49,65.7 47.7,67 46,67 C44.3,67 43,65.7 43,64 L43,44 C43,42.3 44.3,41 46,41 Z" />
+
+    <!-- Главный динамический шеврон-стрела «УРАЛАН» («Вперёд!») -->
+    <path android:pathData="M53,34 L63,34 L79,54 L63,74 L53,74 L69,54 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="53"
+                android:startY="34"
+                android:endX="79"
+                android:endY="74"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFF" />
+                <item android:offset="1.0" android:color="#E0F2FE" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Второй золотой импульс стрелы «Вперёд» -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M68,41 L75,41 L85,54 L75,67 L68,67 L78,54 Z" />
+</vector>
