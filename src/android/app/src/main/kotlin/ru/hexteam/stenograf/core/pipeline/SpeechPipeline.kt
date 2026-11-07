@@ -33,6 +33,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import ru.hexteam.stenograf.audio.AudioDecoder
 import ru.hexteam.stenograf.audio.AudioPreprocessor
+import ru.hexteam.stenograf.audio.VoicePitchAnalyzer
 import ru.hexteam.stenograf.audio.WavWriter
 import ru.hexteam.stenograf.core.model.ProcessingParams
 import ru.hexteam.stenograf.core.model.QualityPreset
@@ -147,67 +148,65 @@ class SpeechPipeline(private val context: Context) {
       WavWriter.write(wavFile, samples, AudioDecoder.TARGET_RATE)
       val durationMs = samples.size * 1000L / AudioDecoder.TARGET_RATE
 
-      // 3. Выделение речевых фрагментов (Silero VAD) и нейросетевая диаризация в зависимости от выбранного режима
+      // 3. Умное выделение речевых окон (Silero VAD с поглощением коротких окон-сирот)
       coroutineContext.ensureActive()
-      val tDiar0 = SystemClock.elapsedRealtime()
+      onProgress(PipelineProgress("Фильтрация пауз (VAD)", "Выделение речевых участков Silero VAD…", 0.26f))
+      val speechWindows = detectSpeechWindows(samples, emptyList(), threads, preset)
 
-      val diarSlices: List<DiarizationSlice>
-      val speechWindows: List<SpeechWindow>
-
-      if (preset == QualityPreset.FAST) {
-        // Режим «Быстро»: сначала мгновенный Silero VAD, затем быстрая кластеризация эмбеддингов 3D-Speaker Cam++ только по речевым участкам
-        onProgress(PipelineProgress("Фильтрация пауз (VAD)", "Быстрое выделение речевых участков Silero VAD…", 0.28f))
-        speechWindows = detectSpeechWindows(samples, emptyList(), threads, preset)
-
-        coroutineContext.ensureActive()
-        onProgress(PipelineProgress("Диаризация (режим «Быстро»)", "Анализ тембров голоса 3D-Speaker Cam++…", 0.34f))
-        diarSlices = runFastVadEmbeddingDiarization(samples, speechWindows, params, threads) { frac, detail ->
-          onProgress(
-            PipelineProgress(
-              "Диаризация (режим «Быстро»)",
-              detail,
-              0.34f + 0.22f * frac.coerceIn(0f, 1f),
-            )
-          )
-        }
-      } else {
-        // Режимы «Стандарт» и «Долго (макс. качество)»: сегментация pyannote 3.0 + 3D-Speaker Cam++
-        // Для длинных записей (> 3,5 мин) выполняется окнами по 3 минуты с глобальным слиянием голосовых отпечатков,
-        // чтобы не копировать гигантские массивы через JNI и не вызывать OutOfMemoryError.
-        onProgress(PipelineProgress("Диаризация говорящих", "Подготовка моделей pyannote 3.0 и 3D-Speaker…", 0.28f))
-        diarSlices = runChunkedPyannoteDiarization(samples, params, threads, preset) { frac, detailText ->
-          onProgress(
-            PipelineProgress(
-              "Диаризация говорящих",
-              detailText,
-              0.28f + 0.26f * frac.coerceIn(0f, 1f),
-            )
-          )
-        }
-
-        coroutineContext.ensureActive()
-        onProgress(PipelineProgress("Фильтрация пауз (VAD)", "Выделение речевых участков Silero VAD…", 0.56f))
-        speechWindows = detectSpeechWindows(samples, diarSlices, threads, preset)
-      }
-      val diarizationMs = SystemClock.elapsedRealtime() - tDiar0
-
-      // 4. Распознавание речи (GigaAM v3 RNN-T с пунктуацией)
+      // 4. Распознавание речи (GigaAM v3 RNN-T с пунктуацией и диалоговыми маркерами смены реплик)
       coroutineContext.ensureActive()
       val tAsr0 = SystemClock.elapsedRealtime()
-      onProgress(PipelineProgress("Распознавание речи", "Инициализация модели GigaAM v3 RNN-T…", 0.60f))
+      onProgress(PipelineProgress("Распознавание речи", "Инициализация модели GigaAM v3 RNN-T…", 0.32f))
       val allWords = runAsrOnWindows(samples, speechWindows, threads) { idx, total ->
         val frac = if (total > 0) idx.toFloat() / total else 0f
         onProgress(
           PipelineProgress(
             "Распознавание речи (GigaAM v3)",
             "Транскрибация фрагмента $idx из $total…",
-            0.60f + 0.34f * frac,
+            0.32f + 0.36f * frac,
           )
         )
       }
       val asrMs = SystemClock.elapsedRealtime() - tAsr0
 
-      // 5. Пословное выравнивание со спикерами и сборка структурированной расшифровки
+      // 5. Двухуровневая фразовая диаризация (3D-Speaker Cam++ + анализ основного тона F0 + кластеризация ядер спикеров)
+      coroutineContext.ensureActive()
+      val tDiar0 = SystemClock.elapsedRealtime()
+      onProgress(PipelineProgress("Диаризация говорящих", "Анализ тембров 3D-Speaker Cam++ и регистра голоса…", 0.70f))
+      val diarSlices = if (allWords.isNotEmpty()) {
+        runCorePhraseDiarization(samples, allWords, params, threads) { frac, detailText ->
+          onProgress(
+            PipelineProgress(
+              "Диаризация говорящих",
+              detailText,
+              0.70f + 0.24f * frac.coerceIn(0f, 1f),
+            )
+          )
+        }
+      } else if (preset == QualityPreset.FAST) {
+        runFastVadEmbeddingDiarization(samples, speechWindows, params, threads) { frac, detail ->
+          onProgress(
+            PipelineProgress(
+              "Диаризация (режим «Быстро»)",
+              detail,
+              0.70f + 0.24f * frac.coerceIn(0f, 1f),
+            )
+          )
+        }
+      } else {
+        runChunkedPyannoteDiarization(samples, params, threads, preset) { frac, detailText ->
+          onProgress(
+            PipelineProgress(
+              "Диаризация говорящих",
+              detailText,
+              0.70f + 0.24f * frac.coerceIn(0f, 1f),
+            )
+          )
+        }
+      }
+      val diarizationMs = SystemClock.elapsedRealtime() - tDiar0
+
+      // 6. Пословное выравнивание со спикерами и сборка структурированной расшифровки
       val tAlign0 = SystemClock.elapsedRealtime()
       onProgress(PipelineProgress("Сборка диалога", "Выравнивание временных меток и реплик…", 0.96f))
       val assigned = TranscriptAligner.assignSpeakersToWords(allWords, diarSlices)
@@ -737,14 +736,287 @@ class SpeechPipeline(private val context: Context) {
     return labels
   }
 
+  /**
+   * Двухуровневая фразовая диаризация (`3D-Speaker Cam++` + частота основного тона `F0` + кластеризация ядер спикеров):
+   * 1) Разбивает распознанные слова на чистые фразовые сегменты по диалоговым тире (`—`) модели `GigaAM v3`,
+   *    концам предложений (`.`, `?`, `!`) и паузам (>= 280 мс), не смешивая голоса разных спикеров в 15-секундных окнах.
+   * 2) Извлекает L2-нормированный эмбеддинг `3D-Speaker Cam++` (с циклическим дополнением коротких фраз до 1,0 с без захвата соседнего голоса)
+   *    и медианную частоту основного тона `F0` (72..360 Гц).
+   * 3) Формирует ядра спикеров на надёжных опорных фразах (>= 1,2 с), поглощает мелкие кластеры-выбросы (< 0,8% речи)
+   *    и назначает все фразы с учётом диалоговых тире и медианного сглаживания.
+   */
+  private suspend fun runCorePhraseDiarization(
+    samples: FloatArray,
+    words: List<Word>,
+    params: ProcessingParams,
+    numThreads: Int,
+    onProgress: (Float, String) -> Unit,
+  ): List<DiarizationSlice> = coroutineScope {
+    val phrases = TranscriptAligner.buildPhraseSegments(words)
+    if (phrases.isEmpty()) return@coroutineScope emptyList()
+
+    val embModelPath = ensureAssetExtracted("models/diarization/embedding.onnx")
+    val sr = AudioDecoder.TARGET_RATE
+    val n = phrases.size
+    val embs = Array(n) { FloatArray(192) }
+    val f0s = FloatArray(n)
+    val durs = FloatArray(n)
+
+    val extractor = SpeakerEmbeddingExtractor(
+      assetManager = null,
+      config = SpeakerEmbeddingExtractorConfig(
+        model = embModelPath,
+        numThreads = numThreads,
+        provider = "cpu",
+      ),
+    )
+    try {
+      val minWindowSamples = sr // 1.0 с (16000 отсчётов) для стабильного эмбеддинга Cam++
+      phrases.forEachIndexed { idx, p ->
+        coroutineContext.ensureActive()
+        if (idx % 6 == 0 || idx == phrases.lastIndex) {
+          onProgress(
+            (idx + 1).toFloat() / n,
+            "Анализ голосов (3D-Speaker + F0): фраза ${idx + 1} из $n…",
+          )
+        }
+        val fromIdx = (((p.startMs - 30L) * sr) / 1000L).toInt().coerceIn(0, samples.size)
+        val toIdx = (((p.endMs + 30L) * sr) / 1000L).toInt().coerceIn(fromIdx, samples.size)
+        val len = toIdx - fromIdx
+        if (len >= sr / 5) {
+          val embSlice = if (len < minWindowSamples) {
+            FloatArray(minWindowSamples) { k -> samples[fromIdx + (k % len)] }
+          } else {
+            samples.copyOfRange(fromIdx, toIdx)
+          }
+          embs[idx] = computeNormalizedEmbedding(extractor, embSlice, sr)
+        }
+        f0s[idx] = VoicePitchAnalyzer.computeMedianF0Hz(samples, fromIdx, toIdx, sr)
+        durs[idx] = ((p.endMs - p.startMs) / 1000f).coerceAtLeast(0.15f)
+      }
+    } finally {
+      extractor.release()
+    }
+
+    var totalSpeechSec = 0f
+    for (d in durs) totalSpeechSec += d
+
+    fun hasValidEmb(idx: Int): Boolean {
+      var sq = 0f
+      for (v in embs[idx]) sq += v * v
+      return sq > 0.25f
+    }
+
+    var coreIndices = (0 until n).filter { i -> durs[i] >= 1.20f && hasValidEmb(i) }
+    if (coreIndices.size < 4) {
+      coreIndices = (0 until n).filter { i -> hasValidEmb(i) }
+    }
+    if (coreIndices.isEmpty()) {
+      return@coroutineScope phrases.map { DiarizationSlice(it.startMs, it.endMs, 0) }
+    }
+
+    val dim = embs[0].size
+    val effThr = (params.clusterThreshold * 0.88f).coerceIn(0.24f, 0.78f)
+    val targetK = if (params.numSpeakers > 0) params.numSpeakers.coerceAtLeast(1) else 1
+
+    val clusters = ArrayList<MutableList<Int>>(coreIndices.size)
+    val cents = ArrayList<FloatArray>(coreIndices.size)
+    val cf0s = ArrayList<Float>(coreIndices.size)
+    val cdurs = ArrayList<Float>(coreIndices.size)
+
+    for (idx in coreIndices) {
+      clusters.add(mutableListOf(idx))
+      cents.add(embs[idx].copyOf())
+      cf0s.add(f0s[idx])
+      cdurs.add(durs[idx])
+    }
+
+    fun cosineDistance(a: FloatArray, b: FloatArray): Float {
+      var dot = 0f
+      for (k in 0 until min(a.size, b.size)) dot += a[k] * b[k]
+      return (1f - dot).coerceIn(0f, 2f)
+    }
+
+    fun recomputeClusterStats(cIdx: Int) {
+      val mem = clusters[cIdx]
+      val newCent = FloatArray(dim)
+      var totalW = 0f
+      val validF0 = ArrayList<Float>(mem.size)
+      for (m in mem) {
+        val w = durs[m]
+        totalW += w
+        val e = embs[m]
+        for (k in 0 until dim) newCent[k] += e[k] * w
+        if (f0s[m] > 50f) validF0.add(f0s[m])
+      }
+      var normSq = 0.0
+      for (v in newCent) normSq += v * v
+      val norm = sqrt(normSq).toFloat()
+      if (norm > 1e-6f) {
+        for (k in 0 until dim) newCent[k] /= norm
+      }
+      cents[cIdx] = newCent
+      cdurs[cIdx] = totalW
+      if (validF0.isNotEmpty()) {
+        validF0.sort()
+        val mid = validF0.size / 2
+        cf0s[cIdx] = if (validF0.size % 2 == 1) validF0[mid] else 0.5f * (validF0[mid - 1] + validF0[mid])
+      }
+    }
+
+    while (clusters.size > targetK) {
+      var bestI = -1
+      var bestJ = -1
+      var bestDist = Float.MAX_VALUE
+      for (i in 0 until clusters.size) {
+        val ci = cents[i]
+        val fi = cf0s[i]
+        for (j in i + 1 until clusters.size) {
+          val d = cosineDistance(ci, cents[j]) + VoicePitchAnalyzer.f0Distance(fi, cf0s[j])
+          if (d < bestDist) {
+            bestDist = d
+            bestI = i
+            bestJ = j
+          }
+        }
+      }
+      if (bestI < 0 || bestJ < 0) break
+      if (params.numSpeakers <= 0 && bestDist > effThr) break
+
+      clusters[bestI].addAll(clusters[bestJ])
+      recomputeClusterStats(bestI)
+      clusters.removeAt(bestJ)
+      cents.removeAt(bestJ)
+      cf0s.removeAt(bestJ)
+      cdurs.removeAt(bestJ)
+    }
+
+    // Консолидация мелких кластеров-выбросов (одиночный смех/кашель/возглас не создаёт ложного спикера)
+    if (params.numSpeakers <= 0 && clusters.size > 1) {
+      val minClusterSec = min(6.0f, max(2.0f, totalSpeechSec * 0.008f))
+      val majorIndices = clusters.indices.filter { cdurs[it] >= minClusterSec }.ifEmpty {
+        listOf(cdurs.indices.maxByOrNull { cdurs[it] } ?: 0)
+      }
+      if (majorIndices.size < clusters.size) {
+        val majorSet = majorIndices.toHashSet()
+        val newClusters = ArrayList<MutableList<Int>>(majorIndices.size)
+        val newCents = ArrayList<FloatArray>(majorIndices.size)
+        val newCf0s = ArrayList<Float>(majorIndices.size)
+        val newCdurs = ArrayList<Float>(majorIndices.size)
+        for (mi in majorIndices) {
+          newClusters.add(clusters[mi])
+          newCents.add(cents[mi])
+          newCf0s.add(cf0s[mi])
+          newCdurs.add(cdurs[mi])
+        }
+        for (i in clusters.indices) {
+          if (i in majorSet) continue
+          val bestM = newClusters.indices.minByOrNull { m ->
+            cosineDistance(cents[i], newCents[m]) + VoicePitchAnalyzer.f0Distance(cf0s[i], newCf0s[m])
+          } ?: 0
+          newClusters[bestM].addAll(clusters[i])
+        }
+        clusters.clear()
+        cents.clear()
+        cf0s.clear()
+        cdurs.clear()
+        clusters.addAll(newClusters)
+        cents.addAll(newCents)
+        cf0s.addAll(newCf0s)
+        cdurs.addAll(newCdurs)
+        for (cIdx in clusters.indices) {
+          recomputeClusterStats(cIdx)
+        }
+      }
+    }
+
+    // Уточнение эталонных центроидов по 65% наиболее чистых опорных фраз каждого спикера (trimmed centroid)
+    val kCount = clusters.size
+    for (k in 0 until kCount) {
+      val mem = clusters[k]
+      if (mem.size >= 4) {
+        val sortedByDist = mem.sortedBy { m -> cosineDistance(embs[m], cents[k]) }
+        val takeCount = ((mem.size * 65) / 100).coerceAtLeast(2)
+        val cleanMem = sortedByDist.take(takeCount)
+        val newCent = FloatArray(dim)
+        val validF0 = ArrayList<Float>(cleanMem.size)
+        for (m in cleanMem) {
+          val w = durs[m]
+          val e = embs[m]
+          for (dIdx in 0 until dim) newCent[dIdx] += e[dIdx] * w
+          if (f0s[m] > 50f) validF0.add(f0s[m])
+        }
+        var normSq = 0.0
+        for (v in newCent) normSq += v * v
+        val norm = sqrt(normSq).toFloat()
+        if (norm > 1e-6f) {
+          for (dIdx in 0 until dim) newCent[dIdx] /= norm
+        }
+        cents[k] = newCent
+        if (validF0.isNotEmpty()) {
+          validF0.sort()
+          val mid = validF0.size / 2
+          cf0s[k] = if (validF0.size % 2 == 1) validF0[mid] else 0.5f * (validF0[mid - 1] + validF0[mid])
+        }
+      }
+    }
+
+    // Назначаем каждую фразу 0..n-1 одному из kCount опорных спикеров
+    val labels = IntArray(n)
+    for (i in 0 until n) {
+      var bestK = 0
+      var bestScore = Float.MAX_VALUE
+      val p = phrases[i]
+      for (k in 0 until kCount) {
+        val cosD = cosineDistance(embs[i], cents[k])
+        val pitchD = VoicePitchAnalyzer.f0Distance(f0s[i], cf0s[k]) * 1.35f
+        var score = cosD + pitchD
+        if (i > 0 && k == labels[i - 1] && !p.hasTurnDash && durs[i] < 0.95f) {
+          score -= 0.06f
+        }
+        if (i > 0 && k == labels[i - 1] && p.hasTurnDash && kCount > 1) {
+          score += 0.04f
+        }
+        if (score < bestScore) {
+          bestScore = score
+          bestK = k
+        }
+      }
+      labels[i] = bestK
+    }
+
+    // Медианное сглаживание коротких фраз (< 0.85 с) без диалогового тире внутри речи одного спикера
+    for (i in 1 until n - 1) {
+      if (labels[i - 1] == labels[i + 1] && labels[i] != labels[i - 1]) {
+        val p = phrases[i]
+        if (durs[i] < 0.85f && !p.hasTurnDash) {
+          val gapBefore = p.startMs - phrases[i - 1].endMs
+          val gapAfter = phrases[i + 1].startMs - p.endMs
+          val f0Diff = VoicePitchAnalyzer.f0Distance(f0s[i], cf0s[labels[i - 1]])
+          if (gapBefore < 380L && gapAfter < 380L && f0Diff < 0.08f) {
+            labels[i] = labels[i - 1]
+          }
+        }
+      }
+    }
+
+    phrases.mapIndexed { idx, p ->
+      DiarizationSlice(
+        startMs = p.startMs,
+        endMs = p.endMs,
+        speakerIndex = labels[idx],
+      )
+    }
+  }
+
   private data class SpeechWindow(val startSample: Int, val endSample: Int) {
     val startMs: Long get() = startSample * 1000L / AudioDecoder.TARGET_RATE
     val endMs: Long get() = endSample * 1000L / AudioDecoder.TARGET_RATE
   }
 
   /**
-   * Выделяет речевые окна при помощи Silero VAD.
-   * Длина каждого окна адаптируется под выбранный режим (`FAST` — до 18 с, `STANDARD` — до 15 с, `HIGH` — до 11 с).
+   * Выделяет речевые окна при помощи Silero VAD с умным слиянием пауз и поглощением коротких окон-сирот (< 3,2 с),
+   * чтобы модель `GigaAM v3 RNN-T` всегда имела достаточный левый и правый речевой контекст и не разрезала фразы.
    */
   private fun detectSpeechWindows(
     samples: FloatArray,
@@ -754,15 +1026,15 @@ class SpeechPipeline(private val context: Context) {
   ): List<SpeechWindow> {
     val maxSec = when (preset) {
       QualityPreset.FAST -> 18.0f
-      QualityPreset.STANDARD -> 15.0f
-      QualityPreset.HIGH -> 11.0f
+      QualityPreset.STANDARD -> 16.5f
+      QualityPreset.HIGH -> 14.5f
     }
     val vadModelPath = ensureAssetExtracted("models/vad/silero_vad.onnx")
     val vadCfg = VadModelConfig(
       sileroVadModelConfig = SileroVadModelConfig(
         model = vadModelPath,
-        threshold = if (preset == QualityPreset.HIGH) 0.38f else 0.42f,
-        minSilenceDuration = if (preset == QualityPreset.HIGH) 0.25f else 0.30f,
+        threshold = if (preset == QualityPreset.HIGH) 0.35f else 0.38f,
+        minSilenceDuration = if (preset == QualityPreset.HIGH) 0.36f else 0.40f,
         minSpeechDuration = 0.18f,
         windowSize = 512,
         maxSpeechDuration = maxSec,
@@ -772,6 +1044,7 @@ class SpeechPipeline(private val context: Context) {
       provider = "cpu",
     )
     val windows = mutableListOf<SpeechWindow>()
+    val padSamples = 3000 // ~188 мс запаса по краям для защиты тихих начал и окончаний слов
     val vad = Vad(assetManager = null, config = vadCfg)
     try {
       val frame = 512
@@ -790,8 +1063,8 @@ class SpeechPipeline(private val context: Context) {
         while (!vad.empty()) {
           val seg = vad.front()
           vad.pop()
-          val s = max(0, seg.start.toInt() - 1600) // +100 мс запаса по краям
-          val e = min(samples.size, seg.start.toInt() + seg.samples.size + 1600)
+          val s = max(0, seg.start.toInt() - padSamples)
+          val e = min(samples.size, seg.start.toInt() + seg.samples.size + padSamples)
           if (e - s >= AudioDecoder.TARGET_RATE / 6) {
             windows += SpeechWindow(s, e)
           }
@@ -802,8 +1075,8 @@ class SpeechPipeline(private val context: Context) {
       while (!vad.empty()) {
         val seg = vad.front()
         vad.pop()
-        val s = max(0, seg.start.toInt() - 1600)
-        val e = min(samples.size, seg.start.toInt() + seg.samples.size + 1600)
+        val s = max(0, seg.start.toInt() - padSamples)
+        val e = min(samples.size, seg.start.toInt() + seg.samples.size + padSamples)
         if (e - s >= AudioDecoder.TARGET_RATE / 6) {
           windows += SpeechWindow(s, e)
         }
@@ -831,10 +1104,10 @@ class SpeechPipeline(private val context: Context) {
       }
     }
 
-    // Сливаем слишком близкие окна (< 250 мс), если суммарная длина не превышает maxSec
-    val merged = mutableListOf<SpeechWindow>()
+    // Сливаем близкие окна (<= 800 мс), если суммарная длина не превышает maxSec
+    var merged = mutableListOf<SpeechWindow>()
     val maxWindowSamples = (AudioDecoder.TARGET_RATE * maxSec).toInt()
-    val mergeGapSamples = (AudioDecoder.TARGET_RATE * 0.25).toInt()
+    val mergeGapSamples = (AudioDecoder.TARGET_RATE * 0.80).toInt()
     for (w in windows.sortedBy { it.startSample }) {
       if (merged.isEmpty()) {
         merged += w
@@ -849,6 +1122,49 @@ class SpeechPipeline(private val context: Context) {
         }
       }
     }
+
+    // Поглощаем короткие окна-сироты (<= 3,2 с) в соседнее окно, если пауза <= 1,2 с,
+    // чтобы одиночные фамилии или концовки фраз не оставались без контекста RNN-T декодера
+    val hardMaxSamples = (AudioDecoder.TARGET_RATE * (maxSec + 3.5f)).toInt()
+    val maxOrphanSamples = (AudioDecoder.TARGET_RATE * 3.2f).toInt()
+    val maxOrphanGapSamples = (AudioDecoder.TARGET_RATE * 1.2f).toInt()
+    var changed = true
+    while (changed) {
+      changed = false
+      val nextList = mutableListOf<SpeechWindow>()
+      var i = 0
+      while (i < merged.size) {
+        val w = merged[i]
+        val wLen = w.endSample - w.startSample
+        if (wLen <= maxOrphanSamples) {
+          if (i + 1 < merged.size) {
+            val nxt = merged[i + 1]
+            if (nxt.startSample - w.endSample <= maxOrphanGapSamples &&
+              nxt.endSample - w.startSample <= hardMaxSamples
+            ) {
+              nextList += SpeechWindow(w.startSample, max(w.endSample, nxt.endSample))
+              i += 2
+              changed = true
+              continue
+            }
+          }
+          if (nextList.isNotEmpty()) {
+            val prv = nextList.last()
+            if (w.startSample - prv.endSample <= maxOrphanGapSamples &&
+              w.endSample - prv.startSample <= hardMaxSamples
+            ) {
+              nextList[nextList.lastIndex] = SpeechWindow(prv.startSample, max(prv.endSample, w.endSample))
+              i += 1
+              changed = true
+              continue
+            }
+          }
+        }
+        nextList += w
+        i += 1
+      }
+      merged = nextList
+    }
     return merged
   }
 
@@ -861,6 +1177,7 @@ class SpeechPipeline(private val context: Context) {
     val recognizer = createRecognizer(numThreads)
     try {
       val words = mutableListOf<Word>()
+      val trimPunctRegex = Regex("[.,!?;:—»«]+$")
       windows.forEachIndexed { idx, win ->
         coroutineContext.ensureActive()
         onProgress(idx + 1, windows.size)
@@ -875,7 +1192,16 @@ class SpeechPipeline(private val context: Context) {
               val tsSec = if (i < result.timestamps.size) result.timestamps[i] else 0f
               RawToken(tok, (tsSec * 1000f).roundToLong())
             }
-            words += TranscriptAligner.tokensToWords(rawTokens, win.startMs, win.endMs)
+            val winWords = TranscriptAligner.tokensToWords(rawTokens, win.startMs, win.endMs)
+            for (w in winWords) {
+              val prev = words.lastOrNull()
+              if (prev != null && w.startMs < prev.endMs - 40L) {
+                val wClean = w.text.lowercase().replace(trimPunctRegex, "")
+                val prevClean = prev.text.lowercase().replace(trimPunctRegex, "")
+                if (wClean.isNotEmpty() && wClean == prevClean) continue
+              }
+              words += w
+            }
           } else if (result.text.isNotBlank()) {
             words += Word(
               text = result.text.trim(),

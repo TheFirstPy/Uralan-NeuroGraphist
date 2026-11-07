@@ -11,6 +11,7 @@ import org.junit.Test
 import ru.hexteam.stenograf.audio.FloatArrayBuilder
 import ru.hexteam.stenograf.audio.Resampler
 import ru.hexteam.stenograf.audio.StreamingResampler
+import ru.hexteam.stenograf.audio.VoicePitchAnalyzer
 import ru.hexteam.stenograf.audio.WavParser
 import ru.hexteam.stenograf.audio.WavWriter
 import ru.hexteam.stenograf.core.export.TranscriptExporter
@@ -19,6 +20,7 @@ import ru.hexteam.stenograf.core.pipeline.DiarizationSlice
 import ru.hexteam.stenograf.core.pipeline.RawToken
 import ru.hexteam.stenograf.core.pipeline.TranscriptAligner
 import java.io.File
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sin
 
@@ -126,5 +128,55 @@ class TranscriptPipelineTest {
   fun `Парсинг кликабельных таймкодов из ИИ-протокола для перехода к аудиофрагменту`() {
     assertEquals(84_500L, TranscriptExporter.extractFirstTimestampMs("`[01:24.5]` **Говорящий 1**: Обсудили архитектуру."))
     assertEquals(12_900L, TranscriptExporter.extractFirstTimestampMs("[00:12.9] Говорящий 2: Принято."))
+  }
+
+  @Test
+  fun `Диалоговое тире GigaAM v3 разделяет фразы и не приклеивается к предыдущему слову`() {
+    val tokens = listOf(
+      RawToken("▁Э-э-э", 50L),
+      RawToken("...", 90L),
+      RawToken("▁Ведёт", 120L),
+      RawToken("▁и", 350L),
+      RawToken("▁тащит", 550L),
+      RawToken("▁разные", 800L),
+      RawToken("▁вещи", 1100L),
+      RawToken(".", 1300L),
+      RawToken("▁—", 1360L),
+      RawToken("▁Ну", 1420L),
+      RawToken(",", 1520L),
+      RawToken("▁представь", 1700L),
+      RawToken("▁уснула", 2200L),
+      RawToken(".", 2500L),
+    )
+    val words = TranscriptAligner.tokensToWords(tokens, chunkStartMs = 0L, chunkEndMs = 3000L)
+    assertEquals(8, words.size)
+    assertEquals("Ведёт", words[0].text)
+    assertEquals("вещи.", words[4].text)
+    assertTrue("Слово после тире должно иметь turnBreakBefore=true", words[5].turnBreakBefore)
+    assertEquals("Ну,", words[5].text)
+
+    val phrases = TranscriptAligner.buildPhraseSegments(words)
+    assertEquals(2, phrases.size)
+    assertEquals("Ведёт и тащит разные вещи.", phrases[0].text)
+    assertEquals("Ну, представь уснула.", phrases[1].text)
+    assertTrue(phrases[1].hasTurnDash)
+  }
+
+  @Test
+  fun `VoicePitchAnalyzer точно различает мужской (100 Гц) и женский (200 Гц) основной тон`() {
+    val sr = 16_000
+    val maleWave = FloatArray(sr) { i ->
+      val t = i.toDouble() / sr
+      (0.6 * sin(2 * PI * 100.0 * t) + 0.3 * sin(2 * PI * 200.0 * t)).toFloat()
+    }
+    val femaleWave = FloatArray(sr) { i ->
+      val t = i.toDouble() / sr
+      (0.6 * sin(2 * PI * 200.0 * t) + 0.3 * sin(2 * PI * 400.0 * t)).toFloat()
+    }
+    val f0Male = VoicePitchAnalyzer.computeMedianF0Hz(maleWave, sampleRate = sr)
+    val f0Female = VoicePitchAnalyzer.computeMedianF0Hz(femaleWave, sampleRate = sr)
+    assertTrue("Мужской F0 ($f0Male Гц) должен быть около 100 Гц", f0Male in 94f..106f)
+    assertTrue("Женский F0 ($f0Female Гц) должен быть около 200 Гц", f0Female in 190f..212f)
+    assertTrue(VoicePitchAnalyzer.f0Distance(f0Male, f0Female) > 0.14f)
   }
 }

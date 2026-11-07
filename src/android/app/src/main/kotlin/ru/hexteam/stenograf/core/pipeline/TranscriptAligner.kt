@@ -18,16 +18,45 @@ data class RawToken(
   val timestampMs: Long,
 )
 
+/** Элементарный фразовый сегмент для точного извлечения голосового эмбеддинга и высоты тона (F0). */
+data class PhraseSegment(
+  val startMs: Long,
+  val endMs: Long,
+  val text: String,
+  val hasTurnDash: Boolean,
+)
+
 /**
  * Алгоритм объединения субсловных токенов ASR и сегментов диаризации в структурированные реплики:
- * 1) Собирает BPE-токены (с префиксом пробела ` ` или `▁` и знаками препинания) в целые слова с точными `startMs` и `endMs`.
- * 2) Каждому слову сопоставляет говорящего по максимальному перекрытию с сегментами диаризации (или ближайшему по времени).
- * 3) Сглаживает одиночные ложные переключения спикера внутри быстрой фразы (медианный фильтр при паузе < 300 мс).
- * 4) Группирует слова в реплики по смене говорящего или длинной паузе (> 1400 мс) и приводит ID спикеров к порядку появления (`speaker_1`, `speaker_2`, ...).
+ * 1) Собирает BPE-токены (с префиксом пробела ` ` или `▁` и знаками препинания) в целые слова с точными `startMs` и `endMs`,
+ *    отсеивая нелексические звуки колебания (`э-э-э`, `а-а-а`, `хмм`) и фиксируя диалоговые тире `—` как маркеры смены реплики.
+ * 2) Группирует слова в чистые фразовые сегменты ([buildPhraseSegments]) по диалоговым тире, границам предложений и паузам.
+ * 3) Каждому слову сопоставляет говорящего по максимальному перекрытию с сегментами диаризации (или ближайшему по времени).
+ * 4) Сглаживает одиночные ложные переключения спикера внутри быстрой фразы (медианный фильтр при паузе < 300 мс).
+ * 5) Группирует слова в реплики по смене говорящего или длинной паузе (> 1500 мс) и приводит ID спикеров к порядку появления (`speaker_1`, `speaker_2`, ...).
  */
 object TranscriptAligner {
 
   private val PUNCT_ONLY = setOf(".", ",", "?", "!", ":", ";", "—", "-", "»", "«", "...")
+  private val REAL_SHORT_WORDS = setOf(
+    "а", "и", "о", "у", "в", "к", "с", "я", "ага", "угу", "да", "ну",
+    "не", "ни", "но", "же", "ли", "бы", "то", "на", "по", "за", "из",
+    "от", "до", "со", "во", "ко", "об", "ох", "ах", "ой", "эй", "эм"
+  )
+  private val VOCAL_NOISE_EXACT = setOf(
+    "э", "ээ", "эээ", "э-э", "э-э-э", "а-а", "а-а-а", "аа", "ааа",
+    "мм", "ммм", "хм", "хмм", "м-м"
+  )
+  private val VOCAL_NOISE_HYPHEN = Regex("^[эамх]+(-[эамх]+)+$", RegexOption.IGNORE_CASE)
+
+  /** Проверяет, является ли токен протяжным нелексическим мычанием (`э-э-э`, `а-а-а`, `хмм`). */
+  fun isVocalHesitation(wordText: String): Boolean {
+    val clean = wordText.lowercase().replace(Regex("[^\\p{L}\\p{N}-]"), "")
+    if (clean.isEmpty()) return true
+    if (clean in REAL_SHORT_WORDS) return false
+    if (clean in VOCAL_NOISE_EXACT) return true
+    return VOCAL_NOISE_HYPHEN.matches(clean)
+  }
 
   /** Собирает субсловные токены в список слов с временными границами в пределах окна [chunkStartMs, chunkEndMs]. */
   fun tokensToWords(
@@ -40,15 +69,17 @@ object TranscriptAligner {
     var currentText = StringBuilder()
     var wordStart = -1L
     var lastTokenTime = chunkStartMs
+    var pendingTurnDash = false
 
     fun flushWord(nextWordStartMs: Long) {
       if (currentText.isEmpty()) return
       val raw = currentText.toString().trim()
-      if (raw.isNotEmpty() && raw !in PUNCT_ONLY) {
+      if (raw.isNotEmpty() && raw !in PUNCT_ONLY && !isVocalHesitation(raw)) {
         val s = wordStart.coerceAtLeast(chunkStartMs)
         val estimatedEnd = max(s + 80L, min(nextWordStartMs, lastTokenTime + 240L))
         val e = estimatedEnd.coerceIn(s + 40L, max(s + 40L, chunkEndMs))
-        words += Word(text = raw, startMs = s, endMs = e)
+        words += Word(text = raw, startMs = s, endMs = e, turnBreakBefore = pendingTurnDash)
+        pendingTurnDash = false
       }
       currentText = StringBuilder()
       wordStart = -1L
@@ -63,6 +94,12 @@ object TranscriptAligner {
         continue
       }
       val trimmed = piece.trim()
+      if (trimmed == "—") {
+        // Диалоговое тире от GigaAM v3 фиксирует смену реплики для следующего слова, не приклеиваясь к предыдущему
+        flushWord(tMs)
+        pendingTurnDash = true
+        continue
+      }
       val isPunct = trimmed in PUNCT_ONLY
       val startsNewWord = piece.startsWith(" ") && !isPunct && currentText.isNotEmpty()
 
@@ -95,6 +132,62 @@ object TranscriptAligner {
     }
     flushWord(chunkEndMs)
     return words
+  }
+
+  /**
+   * Разбивает поток распознанных слов на элементарные фразовые сегменты по диалоговым тире (`—`),
+   * знакам конца предложения (`.`, `?`, `!`, `…`) и паузам (>= 280 мс), поглощая слишком короткие
+   * одиночные слова-сироты (< 550 мс) без диалогового тире, чтобы каждый сегмент содержал чистый голос одного спикера.
+   */
+  fun buildPhraseSegments(words: List<Word>): List<PhraseSegment> {
+    if (words.isEmpty()) return emptyList()
+    val rawPhrases = mutableListOf<PhraseSegment>()
+    var cur = mutableListOf<Word>()
+
+    fun flushCur() {
+      if (cur.isEmpty()) return
+      rawPhrases += PhraseSegment(
+        startMs = cur.first().startMs,
+        endMs = cur.last().endMs,
+        text = cur.joinToString(" ") { it.text },
+        hasTurnDash = cur.first().turnBreakBefore,
+      )
+      cur = mutableListOf()
+    }
+
+    for (w in words) {
+      if (cur.isNotEmpty()) {
+        val prevTxt = cur.last().text
+        val endsSent = prevTxt.endsWith(".") || prevTxt.endsWith("?") || prevTxt.endsWith("!") || prevTxt.endsWith("…")
+        val gap = w.startMs - cur.last().endMs
+        val spanDur = w.endMs - cur.first().startMs
+        val curDur = cur.last().endMs - cur.first().startMs
+        val shouldSplit = (w.turnBreakBefore && curDur >= 350L) ||
+          (endsSent && gap >= 80L && curDur >= 650L) ||
+          (gap >= 280L && curDur >= 550L) ||
+          spanDur >= 4200L
+        if (shouldSplit) {
+          flushCur()
+        }
+      }
+      cur += w
+    }
+    flushCur()
+
+    val merged = mutableListOf<PhraseSegment>()
+    for (p in rawPhrases) {
+      val dur = p.endMs - p.startMs
+      val last = merged.lastOrNull()
+      if (last != null && dur < 550L && !p.hasTurnDash && (p.startMs - last.endMs) < 320L) {
+        merged[merged.lastIndex] = last.copy(
+          endMs = p.endMs,
+          text = "${last.text} ${p.text}",
+        )
+      } else {
+        merged += p
+      }
+    }
+    return merged
   }
 
   /** Назначает каждому слову индекс спикера по пересечению с сегментами диаризации. */

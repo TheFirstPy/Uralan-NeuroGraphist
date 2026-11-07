@@ -4,6 +4,8 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.ln
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -101,5 +103,90 @@ object AudioPreprocessor {
     val gain = if (peak > 1e-6f) minOf(0.9f / peak, 10f) else 1f
     if (abs(gain - 1f) > 0.01f) for (i in samples.indices) samples[i] *= gain
     return Stats(peak, rms, gain)
+  }
+}
+
+/**
+ * Оценка медианной частоты основного тона голоса (F0, 72..360 Гц) методом нормированной автокорреляции
+ * с подавлением субгармоник (удвоения периода). Используется для повышения точности разделения
+ * мужских и женских голосов, а также разных регистров тембра при диаризации.
+ */
+object VoicePitchAnalyzer {
+  private val LN2 = ln(2.0).toFloat()
+
+  fun computeMedianF0Hz(
+    samples: FloatArray,
+    fromIdx: Int = 0,
+    toIdx: Int = samples.size,
+    sampleRate: Int = 16_000,
+  ): Float {
+    val start = fromIdx.coerceIn(0, samples.size)
+    val end = toIdx.coerceIn(start, samples.size)
+    val frameLen = (sampleRate * 0.032f).toInt() // 32 мс (512 отсчётов при 16 кГц)
+    val hop = frameLen / 2
+    if (end - start < frameLen) return 0f
+
+    val minLag = (sampleRate / 360).coerceAtLeast(1)
+    val maxLag = (sampleRate / 72).coerceAtMost(frameLen - 1)
+    val f0Values = ArrayList<Float>()
+    val centered = FloatArray(frameLen)
+
+    var pos = start
+    while (pos + frameLen <= end) {
+      var mean = 0f
+      for (k in 0 until frameLen) mean += samples[pos + k]
+      mean /= frameLen
+
+      var r0 = 0f
+      for (k in 0 until frameLen) {
+        val v = samples[pos + k] - mean
+        centered[k] = v
+        r0 += v * v
+      }
+      if (r0 / frameLen >= 3e-4f) {
+        var bestLag = minLag
+        var maxPeak = -1f
+        val acByLag = FloatArray(maxLag + 1)
+        for (lag in minLag..maxLag) {
+          var sum = 0f
+          val limit = frameLen - lag
+          for (k in 0 until limit) {
+            sum += centered[k] * centered[k + lag]
+          }
+          val normAc = sum / (r0 + 1e-9f)
+          acByLag[lag] = normAc
+          if (normAc > maxPeak) {
+            maxPeak = normAc
+            bestLag = lag
+          }
+        }
+        if (maxPeak >= 0.42f) {
+          val halfLag = bestLag / 2
+          val chosenLag = if (halfLag >= minLag && acByLag[halfLag] >= 0.80f * maxPeak) {
+            halfLag
+          } else {
+            bestLag
+          }
+          f0Values.add(sampleRate.toFloat() / chosenLag)
+        }
+      }
+      pos += hop
+    }
+
+    if (f0Values.isEmpty()) return 0f
+    f0Values.sort()
+    val mid = f0Values.size / 2
+    return if (f0Values.size % 2 == 1) {
+      f0Values[mid]
+    } else {
+      0.5f * (f0Values[mid - 1] + f0Values[mid])
+    }
+  }
+
+  /** Октавное расстояние между двумя оценками основного тона (до +0.25 к косинусному расстоянию). */
+  fun f0Distance(f0A: Float, f0B: Float): Float {
+    if (f0A <= 50f || f0B <= 50f) return 0f
+    val octDiff = abs(ln((f0A / f0B).toDouble()).toFloat() / LN2)
+    return min(0.25f, octDiff * 0.18f)
   }
 }
