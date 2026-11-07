@@ -114,10 +114,11 @@ style: |
 
 ## Готовность к сдаче и защите
 
-- **Исходный код проекта:** [https://github.com/TheFirstPy/Uralan-NeuroGraphist](https://github.com/TheFirstPy/Uralan-NeuroGraphist) (GitHub Flow)
+- **Исходный код проекта:** [https://github.com/TheFirstPy/Uralan-NeuroGraphist](https://github.com/TheFirstPy/Uralan-NeuroGraphist) (GitHub Flow, 76 тестов)
 - **Готовый подписанный APK:** [Скачать на Google Диске](https://drive.google.com/file/d/1VOA6RNx1JRe1wsy3YlQf7TVfOY-t63R3/view?usp=drive_link) (721 МБ, 100% офлайн)
-- **Интерактивная презентация:** `docs/presentation/slides.html`
-- **Документация:** `docs/ARCHITECTURE.md`, `docs/LIMITATIONS.md`, `docs/TEST_RESULTS.md`
+- **🎬 Видеодемонстрация работы приложения:** [Смотреть на YouTube](https://youtu.be/7WeMJy39DUo?is=4fodK-iAKE5KDChe)
+- **Интерактивная презентация:** [`docs/presentation/slides.html`](slides.html) (16:9, таймер 5:00, суфлер N)
+- **Документация и верификация:** [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), [`docs/TEST_RESULTS.md`](../TEST_RESULTS.md)
 - **Формат сдачи:** Соответствует спецификации хакатона и шаблону `hacathon_template`
 
 ### Спасибо за внимание! Готовы к вашим вопросам.
