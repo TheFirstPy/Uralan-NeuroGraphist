@@ -1,0 +1,36 @@
+# Секреты и локальная конфигурация
+.env
+*.key
+*.pem
+local.properties
+
+# Редакторы и ОС
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.iml
+
+# Временные файлы и кеши сборки
+*.log
+tmp/
+temp/
+.gradle/
+build/
+src/android/.gradle/
+src/android/build/
+src/android/app/build/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Тяжёлые бинарные веса моделей в assets и APK скачиваются/собираются скриптом
+# (APK выкладывается в Releases или artifacts/neuro-stenograf-release.apk при необходимости)
+src/android/app/src/main/assets/models/asr/*.onnx
+src/android/app/src/main/assets/models/diarization/*.onnx
+src/android/app/src/main/assets/models/vad/*.onnx
+src/android/app/src/main/assets/models/denoise/*.onnx
+src/android/app/src/main/assets/llm/*.litertlm
+src/android/app/libs/*.aar
+artifacts/demo/*.apk
