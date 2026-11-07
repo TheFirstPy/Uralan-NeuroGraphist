@@ -83,8 +83,8 @@
 ## Инструкция по установке и использованию
 
 ### Вариант 1. Установка готового APK
-* **Скачать APK:** [GitHub Releases v1.0.0](https://github.com/TheFirstPy/Uralan-NeuroGraphist/releases/download/v1.0.0/uralan-stenograf-release.apk)
-* **Размер:** 721 МБ (включает все веса ONNX + LLM INT4 + сэмплы)
+* **Скачать APK (Google Drive):** [uralan-stenograf-release.apk на Google Диске](https://drive.google.com/file/d/1VOA6RNx1JRe1wsy3YlQf7TVfOY-t63R3/view?usp=drive_link)
+* **Размер:** 721 МБ (100% офлайн: включает все веса ONNX + LLM INT4 + сэмплы)
 * **SHA-256:** `0b2c2936a8f2ccc795b642d8fcc653c872136480a2bea14ee9d092d079843eae`
 1. Скопируйте файл `artifacts/demo/uralan-stenograf-release.apk` (или `artifacts/demo/neuro-stenograf-release.apk`) на Android-устройство или установите через `adb`:
    ```bash
